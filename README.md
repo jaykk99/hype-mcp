@@ -1,0 +1,2 @@
+# hype-mcp
+hype-mcp
