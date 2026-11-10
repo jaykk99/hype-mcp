@@ -1,0 +1,5 @@
+{ "functions": {
+  "app/api/mcp/route.ts": { "maxDuration": 300, "memory": 3009 },
+  "app/api/v/[token]/route.ts": { "maxDuration": 300, "memory": 3009 },
+  "app/api/i/[token]/route.ts": { "maxDuration": 120, "memory": 2048 }
+} }

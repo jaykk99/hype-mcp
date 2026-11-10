@@ -1,0 +1,74 @@
+{
+ "brand_name": "Gutter Genie",
+ "handle": "@gutter_genie1",
+ "theme": {
+  "bg": "#1c1c20",
+  "fg": "#ffffff",
+  "accent": "#e53935",
+  "accent2": "#ff7043",
+  "display_font": "Anton"
+ },
+ "music": "ambient",
+ "voiceover": {
+  "script": "Your gutters are about to freeze solid. Leaves and maple seeds plug them up, so the water has nowhere to go. It spills over, freezes at the edge, and pushes back under your shingles. That's an ice dam. We clear gutters and downspouts across Winnipeg, Steinbach and Grunthal. Text Gutter Genie for a free inspection.",
+  "voice": "am_michael"
+ },
+ "scenes": [
+  {
+   "type": "hook",
+   "start": 0,
+   "end": 2.2,
+   "text": "Your gutters freeze *solid* soon",
+   "subtext": "Manitoba, check yours now"
+  },
+  {
+   "type": "code",
+   "start": 0,
+   "end": 4,
+   "transition": "zoom",
+   "code": "function draw(ctx,t,p,W,H,A){var g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,'#0f1a2b');g.addColorStop(1,'#1c1c20');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);var gy=H*0.40,gx0=W*0.06,gx1=W*0.86,gh=W*0.07;ctx.fillStyle='#3a3a42';ctx.beginPath();ctx.moveTo(0,H*0.14);ctx.lineTo(W*0.92,gy-gh*0.2);ctx.lineTo(W*0.92,gy);ctx.lineTo(0,H*0.2);ctx.closePath();ctx.fill();ctx.strokeStyle='#4a4a54';ctx.lineWidth=3;for(var r=1;r<7;r++){ctx.beginPath();ctx.moveTo(0,H*0.14+r*H*0.008);ctx.lineTo(W*0.92,gy-gh*0.2+r*H*0.003);ctx.stroke();}var fill=A.clamp(t/2.2,0,1);var cols=['#d35400','#a0522d','#c0392b','#8e5b2e','#e67e22'];for(var i=0;i<34;i++){var land=i*0.065;var k=A.clamp((t-land)/0.5,0,1);if(k<=0)continue;var lx=gx0+20+A.rand(i)*(gx1-gx0-40);var ly=A.lerp(H*0.05+A.rand(i+50)*H*0.1,gy+gh*0.55-Math.floor(i/9)*gh*0.22,A.ease.out(k));ctx.save();ctx.translate(lx+Math.sin(t*3+i)*8*(1-k),ly);ctx.rotate(A.rand(i+9)*6+t*(1-k)*4);ctx.fillStyle=cols[i%5];ctx.beginPath();ctx.ellipse(0,0,W*0.022,W*0.01,0,0,Math.PI*2);ctx.fill();ctx.restore();}ctx.fillStyle='#cfd8dc';ctx.fillRect(gx0,gy+gh,gx1-gx0,10);ctx.fillRect(gx0,gy,10,gh);ctx.fillStyle='#b0bec5';ctx.fillRect(gx0,gy+gh*0.15,8,gh*0.85);ctx.fillStyle='#cfd8dc';ctx.fillRect(gx1-14,gy,14,gh+10);ctx.fillRect(gx1-14,gy+gh,W*0.05,H*0.36);var spill=A.clamp((t-1.6)/0.8,0,1);if(spill>0){ctx.strokeStyle='rgba(79,195,247,0.85)';ctx.lineCap='round';for(var j=0;j<9;j++){var sx=gx0+60+j*(gx1-gx0-120)/8;var len=H*0.18*spill*(0.6+0.4*A.rand(j+3));ctx.lineWidth=6+A.rand(j)*6;ctx.beginPath();ctx.moveTo(sx,gy+gh);ctx.quadraticCurveTo(sx+12,gy+gh+len*0.5,sx+4,gy+gh+len);ctx.stroke();for(var d=0;d<3;d++){var dy=((t*700+d*90+j*37)%(H*0.22));ctx.fillStyle='rgba(79,195,247,0.8)';ctx.beginPath();ctx.arc(sx+4,gy+gh+len+dy*spill,5,0,Math.PI*2);ctx.fill();}}}var tk=A.ease.back(A.clamp((t-0.3)/0.45,0,1));ctx.save();ctx.translate(W/2,A.textBottom-W*0.12);ctx.scale(tk,tk);ctx.textAlign='center';ctx.fillStyle=A.colors.accent;ctx.font=Math.round(W*0.15)+'px Anton';ctx.fillText('CLOGGED',0,0);ctx.restore();ctx.globalAlpha=A.clamp((t-0.7)/0.4,0,1);ctx.textAlign='center';ctx.fillStyle='#ffffff';ctx.font='800 '+Math.round(W*0.052)+'px Inter';ctx.fillText('water has nowhere to go',W/2,A.textBottom-W*0.02);ctx.globalAlpha=1;}"
+  },
+  {
+   "type": "code",
+   "start": 0,
+   "end": 4.2,
+   "transition": "slide",
+   "code": "function draw(ctx,t,p,W,H,A){ctx.fillStyle='#101722';ctx.fillRect(0,0,W,H);for(var s=0;s<60;s++){var sx=A.rand(s)*W;var sy=(A.rand(s+7)*H+t*(60+A.rand(s+3)*90))%H;ctx.globalAlpha=0.5;ctx.fillStyle='#ffffff';ctx.beginPath();ctx.arc(sx,sy,2+A.rand(s+1)*3,0,Math.PI*2);ctx.fill();}ctx.globalAlpha=1;var ex=W*0.82,ey=H*0.42;ctx.fillStyle='#4e342e';ctx.beginPath();ctx.moveTo(-10,H*0.12);ctx.lineTo(ex,ey);ctx.lineTo(ex,ey+28);ctx.lineTo(-10,H*0.12+28);ctx.closePath();ctx.fill();ctx.fillStyle='#5d6470';ctx.beginPath();ctx.moveTo(-10,H*0.12-26);ctx.lineTo(ex+10,ey-24);ctx.lineTo(ex+10,ey);ctx.lineTo(-10,H*0.12);ctx.closePath();ctx.fill();ctx.fillStyle='#f5f7fa';ctx.beginPath();ctx.moveTo(-10,H*0.12-26);ctx.lineTo(ex-W*0.12,ey-24-(ey-H*0.12)*0.13);ctx.lineTo(ex-W*0.12,ey-24-(ey-H*0.12)*0.13-40);ctx.lineTo(-10,H*0.12-90);ctx.closePath();ctx.fill();var ice=A.ease.out(A.clamp(t/2.4,0,1));ctx.fillStyle='rgba(179,229,252,0.95)';ctx.beginPath();ctx.moveTo(ex-W*0.16,ey-24-(W*0.16)*((ey-H*0.12)/ex));ctx.quadraticCurveTo(ex-W*0.06,ey-24-90*ice,ex+14,ey-24-30*ice);ctx.lineTo(ex+14,ey);ctx.closePath();ctx.fill();for(var c=0;c<7;c++){var cx=ex-W*0.15+c*W*0.026;var cl=(40+A.rand(c)*90)*ice;ctx.beginPath();ctx.moveTo(cx-9,ey+28);ctx.lineTo(cx+9,ey+28);ctx.lineTo(cx,ey+28+cl);ctx.closePath();ctx.fill();}var wk=A.clamp((t-1.2)/1.6,0,1);if(wk>0){ctx.strokeStyle='#29b6f6';ctx.lineWidth=10;ctx.lineCap='round';ctx.setLineDash([22,14]);ctx.beginPath();var x0=ex-W*0.17,y0=ey-30-(W*0.17)*((ey-H*0.12)/ex);var x1=A.lerp(x0,W*0.3,wk),y1=A.lerp(y0,H*0.12+(W*0.3)*((ey-H*0.12)/ex)-8,wk);ctx.moveTo(x0,y0);ctx.lineTo(x1,y1);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#29b6f6';ctx.beginPath();ctx.arc(x1,y1,14,0,Math.PI*2);ctx.fill();}var tk=A.ease.back(A.clamp((t-0.5)/0.45,0,1));ctx.save();ctx.translate(W/2,A.textBottom-W*0.12);ctx.scale(tk,tk);ctx.textAlign='center';ctx.fillStyle='#b3e5fc';ctx.font=Math.round(W*0.15)+'px Anton';ctx.fillText('ICE DAM',0,0);ctx.restore();ctx.globalAlpha=A.clamp((t-1)/0.4,0,1);ctx.textAlign='center';ctx.fillStyle='#ffffff';ctx.font='800 '+Math.round(W*0.05)+'px Inter';ctx.fillText('water backs up under shingles',W/2,A.textBottom-W*0.02);ctx.globalAlpha=1;}"
+  },
+  {
+   "type": "list",
+   "start": 0,
+   "end": 3.6,
+   "text": "Check yours for",
+   "items": [
+    "Water spilling over",
+    "Sagging gutters",
+    "Plants growing up top"
+   ],
+   "transition": "fade"
+  },
+  {
+   "type": "hook",
+   "start": 0,
+   "end": 2.4,
+   "text": "Then it *freezes* there",
+   "subtext": "until spring",
+   "transition": "cut"
+  },
+  {
+   "type": "code",
+   "start": 0,
+   "end": 3.4,
+   "transition": "zoom",
+   "code": "function draw(ctx,t,p,W,H,A){var g=ctx.createRadialGradient(W/2,H*0.36,20,W/2,H*0.36,W);g.addColorStop(0,'#24303f');g.addColorStop(1,'#141a22');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);ctx.strokeStyle='rgba(255,255,255,0.06)';ctx.lineWidth=2;for(var i=0;i<14;i++){ctx.beginPath();ctx.moveTo(0,H*0.1+i*H*0.04);ctx.lineTo(W,H*0.1+i*H*0.04+H*0.03*Math.sin(i));ctx.stroke();ctx.beginPath();ctx.moveTo(i*W/13,H*0.08);ctx.lineTo(i*W/13+W*0.04,H*0.66);ctx.stroke();}ctx.strokeStyle='rgba(229,57,53,0.55)';ctx.lineWidth=6;ctx.setLineDash([18,14]);var pts=[[W*0.32,H*0.2,'Winnipeg'],[W*0.72,H*0.42,'Steinbach'],[W*0.56,H*0.53,'Grunthal']];var lk=A.clamp((t-0.9)/1.2,0,1);ctx.beginPath();ctx.moveTo(pts[0][0],pts[0][1]);ctx.lineTo(A.lerp(pts[0][0],pts[1][0],lk),A.lerp(pts[0][1],pts[1][1],lk));if(lk>=1){var l2=A.clamp((t-2.1)/0.7,0,1);ctx.lineTo(A.lerp(pts[1][0],pts[2][0],l2),A.lerp(pts[1][1],pts[2][1],l2));}ctx.stroke();ctx.setLineDash([]);for(var k=0;k<3;k++){var d=A.clamp((t-k*0.45)/0.5,0,1);if(d<=0)continue;var b=A.ease.back(d);var x=pts[k][0],y=pts[k][1]-(1-b)*H*0.12;ctx.globalAlpha=d*0.35;ctx.fillStyle='#000';ctx.beginPath();ctx.ellipse(pts[k][0],pts[k][1]+8,26*b,9*b,0,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;ctx.fillStyle=A.colors.accent;ctx.beginPath();ctx.arc(x,y-46,30,Math.PI,0);ctx.lineTo(x,y);ctx.closePath();ctx.fill();ctx.beginPath();ctx.arc(x,y-46,30,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(x,y-46,11,0,Math.PI*2);ctx.fill();var r=1+0.6*((t*1.2+k*0.3)%1);ctx.globalAlpha=Math.max(0,1-((t*1.2+k*0.3)%1))*d;ctx.strokeStyle=A.colors.accent;ctx.lineWidth=4;ctx.beginPath();ctx.ellipse(pts[k][0],pts[k][1]+6,30*r,11*r,0,0,Math.PI*2);ctx.stroke();ctx.globalAlpha=d;ctx.fillStyle='#fff';ctx.font='800 '+Math.round(W*0.05)+'px Inter';ctx.textAlign=k===1?'right':'left';ctx.fillText(pts[k][2],x+(k===1?-46:46),y-32);ctx.globalAlpha=1;}var tk=A.ease.out(A.clamp((t-1.2)/0.5,0,1));ctx.globalAlpha=tk;ctx.textAlign='center';ctx.fillStyle='#ffffff';ctx.font=Math.round(W*0.11)+'px Anton';ctx.fillText('WE COME TO YOU',W/2,A.textBottom-W*0.02);ctx.globalAlpha=1;}"
+  },
+  {
+   "type": "cta",
+   "start": 0,
+   "end": 3,
+   "text": "Free *inspection*",
+   "subtext": "Text 204-972-0325",
+   "transition": "zoom"
+  }
+ ]
+}

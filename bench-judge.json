@@ -1,0 +1,33 @@
+{
+  "input": "guttergenie.vercel.app",
+  "started": "2026-11-10T14:51:32.153Z",
+  "research": {
+    "seconds": 1.3,
+    "name": "Gutter Genie",
+    "one_liner": "Your local Winnipeg gutter experts – clean, protect, and beautify your home with hassle‑free service.",
+    "pillars": [
+      "Gutter Care 101",
+      "Winter Prep & Snow Shoveling",
+      "Seasonal Services",
+      "Local Stories & Testimonials",
+      "Behind‑the‑Scenes & Owner Spotlight"
+    ],
+    "sources": []
+  },
+  "judge": {
+    "seconds": 188.1,
+    "bad_generic_post": [
+      19,
+      19
+    ],
+    "good_specific_post": [
+      76,
+      76
+    ],
+    "gap": 57,
+    "good_spread": 0,
+    "bad_spread": 0
+  },
+  "cases": [],
+  "error": "Error: Could not generate any drafts — check LLM_API_KEY / LLM_MODEL.\n    at createPost (/home/claude/hype-mcp/lib/generate.ts:137:29)\n    at async <anonymous> (/home/claude/hype-mcp/scripts/bench.ts:79:18)"
+}

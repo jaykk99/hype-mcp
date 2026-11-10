@@ -1,0 +1,158 @@
+{
+  "video_url": "http://localhost:3000/api/files/97dd92f8.mp4",
+  "cover_url": "http://localhost:3000/api/files/97dd92f8_cover.jpg",
+  "contact_sheet_url": "http://localhost:3000/api/files/97dd92f8_frames.jpg",
+  "storage": "temporary (lasts only while this server instance is warm — set BLOB_READ_WRITE_TOKEN)",
+  "duration": 6,
+  "resolution": "720x1280@30",
+  "scorecard": {
+    "score": 41,
+    "verdict": "reject",
+    "creative": 21,
+    "technical": 87,
+    "visual": null,
+    "checks": [
+      {
+        "check": "duration_fits_platform",
+        "pass": false,
+        "detail": "6s (target 7-45s)",
+        "penalty": 8
+      },
+      {
+        "check": "hook_scene_fast",
+        "pass": true,
+        "detail": "first scene 3s (≤3s keeps retention)",
+        "penalty": 0
+      },
+      {
+        "check": "hook_has_text",
+        "pass": true,
+        "detail": "hook text: \"Gutter Genie\"",
+        "penalty": 0
+      },
+      {
+        "check": "ends_with_cta",
+        "pass": true,
+        "detail": "last scene: cta",
+        "penalty": 0
+      },
+      {
+        "check": "enough_scene_changes",
+        "pass": false,
+        "detail": "2 scenes (pattern interrupts every 2-4s)",
+        "penalty": 5
+      },
+      {
+        "check": "no_dead_air_scenes",
+        "pass": true,
+        "detail": "ok",
+        "penalty": 0
+      },
+      {
+        "check": "contrast_worst_case",
+        "pass": true,
+        "detail": "worst 4.2:1 (info)",
+        "penalty": 0
+      },
+      {
+        "check": "text_in_safe_zone",
+        "pass": true,
+        "detail": "ok",
+        "penalty": 0
+      },
+      {
+        "check": "no_blank_frames",
+        "pass": true,
+        "detail": "ok",
+        "penalty": 0
+      },
+      {
+        "check": "assets_loaded",
+        "pass": true,
+        "detail": "ok",
+        "penalty": 0
+      },
+      {
+        "check": "hashtag_count",
+        "pass": false,
+        "detail": "0 hashtags (target 3-8)",
+        "penalty": 3
+      }
+    ],
+    "fixes": [
+      "[measured duration_fits_platform] 6s (target 7-45s)",
+      "[measured enough_scene_changes] 2 scenes (pattern interrupts every 2-4s)",
+      "[creative] 1. Hook rewrite: \"Did you know clogged gutters can cost you thousands? Watch how we fix it in 3 seconds.\" (adds curiosity and urgency)",
+      "[creative] 2. Add a quick 2‑second before/after clip of a gutter being cleaned to deliver instant value and proof.",
+      "[creative] 3. CTA rewrite: \"Text 204‑972‑0325 for a free inspection—no strings attached.\" (clarifies offer and adds urgency)",
+      "[creative] 4. Make the reel loopable: end with a clean gutter shot and a subtle overlay saying \"Tap to book\" or a swipe‑up link, so the loop feels natural."
+    ],
+    "auto_fixable": []
+  },
+  "rounds": [
+    {
+      "round": 0,
+      "score": 41,
+      "render_seconds": 3.1,
+      "notes": [
+        "LLM revision failed: LLM 400: {\"success\":false,\"error\":{\"message\":\"The model exhausted its output token limit before producing an answer. Increase the token limit or reduce reasoning effort.\",\"code\":\"output_token_limit_exceeded\",\"timestamp\":\"2026-11-10T15:56:33.169Z\",\"details\":{\"name\":\"UpstreamError\",\"upstreamHost\":\"portkey.myce"
+      ]
+    },
+    {
+      "round": 1,
+      "score": 41,
+      "render_seconds": 3.6,
+      "notes": [
+        "scored lower than previous — kept previous"
+      ]
+    }
+  ],
+  "passed_threshold": false,
+  "voiceover": null,
+  "spec": {
+    "width": 720,
+    "height": 1280,
+    "fps": 30,
+    "duration": 6,
+    "brand_name": "Gutter Genie",
+    "handle": "@GutterGenie",
+    "theme": {
+      "bg": "#1f1f23",
+      "fg": "#ffffff",
+      "accent": "#e53935",
+      "accent2": "#e53935",
+      "display_font": "Anton"
+    },
+    "assets": {},
+    "scenes": [
+      {
+        "type": "hook",
+        "start": 0,
+        "end": 3,
+        "text": "Gutter Genie"
+      },
+      {
+        "type": "cta",
+        "start": 3,
+        "end": 6,
+        "text": "Book yours today",
+        "subtext": "Text 204-972-0325",
+        "transition": "zoom"
+      }
+    ],
+    "music": "pulse",
+    "progress_bar": true
+  },
+  "timings": {
+    "write_spec": 0.447,
+    "images": 0.448,
+    "voiceover": 0.448,
+    "render_and_qa": 328.878,
+    "total": 328.912
+  },
+  "warnings": [
+    "Structure enforced: added a CTA end card",
+    "Video is on temporary storage. Set BLOB_READ_WRITE_TOKEN (Vercel Blob) or SUPABASE_URL+SUPABASE_SERVICE_ROLE_KEY so links last.",
+    "VISION_MODEL not set — frames were measured technically but not reviewed by a vision model."
+  ]
+}

@@ -1,0 +1,44 @@
+{
+ "brand_name": "Gutter Genie",
+ "handle": "@gutter_genie1",
+ "theme": {
+  "bg": "#1c1c20",
+  "fg": "#ffffff",
+  "accent": "#e53935",
+  "accent2": "#ff7043",
+  "display_font": "Anton"
+ },
+ "scenes": [
+  {
+   "type": "hook",
+   "start": 0,
+   "end": 2,
+   "text": "How an *ice dam* wrecks your roof",
+   "subtext": "swipe \u2192"
+  },
+  {
+   "type": "code",
+   "start": 0,
+   "end": 3,
+   "code": "function draw(ctx,t,p,W,H,A){ctx.fillStyle='#101722';ctx.fillRect(0,0,W,H);for(var s=0;s<60;s++){var sx=A.rand(s)*W;var sy=(A.rand(s+7)*H+t*(60+A.rand(s+3)*90))%H;ctx.globalAlpha=0.5;ctx.fillStyle='#ffffff';ctx.beginPath();ctx.arc(sx,sy,2+A.rand(s+1)*3,0,Math.PI*2);ctx.fill();}ctx.globalAlpha=1;var ex=W*0.82,ey=H*0.42;ctx.fillStyle='#4e342e';ctx.beginPath();ctx.moveTo(-10,H*0.12);ctx.lineTo(ex,ey);ctx.lineTo(ex,ey+28);ctx.lineTo(-10,H*0.12+28);ctx.closePath();ctx.fill();ctx.fillStyle='#5d6470';ctx.beginPath();ctx.moveTo(-10,H*0.12-26);ctx.lineTo(ex+10,ey-24);ctx.lineTo(ex+10,ey);ctx.lineTo(-10,H*0.12);ctx.closePath();ctx.fill();ctx.fillStyle='#f5f7fa';ctx.beginPath();ctx.moveTo(-10,H*0.12-26);ctx.lineTo(ex-W*0.12,ey-24-(ey-H*0.12)*0.13);ctx.lineTo(ex-W*0.12,ey-24-(ey-H*0.12)*0.13-40);ctx.lineTo(-10,H*0.12-90);ctx.closePath();ctx.fill();var ice=A.ease.out(A.clamp(t/2.4,0,1));ctx.fillStyle='rgba(179,229,252,0.95)';ctx.beginPath();ctx.moveTo(ex-W*0.16,ey-24-(W*0.16)*((ey-H*0.12)/ex));ctx.quadraticCurveTo(ex-W*0.06,ey-24-90*ice,ex+14,ey-24-30*ice);ctx.lineTo(ex+14,ey);ctx.closePath();ctx.fill();for(var c=0;c<7;c++){var cx=ex-W*0.15+c*W*0.026;var cl=(40+A.rand(c)*90)*ice;ctx.beginPath();ctx.moveTo(cx-9,ey+28);ctx.lineTo(cx+9,ey+28);ctx.lineTo(cx,ey+28+cl);ctx.closePath();ctx.fill();}var wk=A.clamp((t-1.2)/1.6,0,1);if(wk>0){ctx.strokeStyle='#29b6f6';ctx.lineWidth=10;ctx.lineCap='round';ctx.setLineDash([22,14]);ctx.beginPath();var x0=ex-W*0.17,y0=ey-30-(W*0.17)*((ey-H*0.12)/ex);var x1=A.lerp(x0,W*0.3,wk),y1=A.lerp(y0,H*0.12+(W*0.3)*((ey-H*0.12)/ex)-8,wk);ctx.moveTo(x0,y0);ctx.lineTo(x1,y1);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#29b6f6';ctx.beginPath();ctx.arc(x1,y1,14,0,Math.PI*2);ctx.fill();}var tk=A.ease.back(A.clamp((t-0.5)/0.45,0,1));ctx.save();ctx.translate(W/2,A.textBottom-W*0.12);ctx.scale(tk,tk);ctx.textAlign='center';ctx.fillStyle='#b3e5fc';ctx.font=Math.round(W*0.15)+'px Anton';ctx.fillText('ICE DAM',0,0);ctx.restore();ctx.globalAlpha=A.clamp((t-1)/0.4,0,1);ctx.textAlign='center';ctx.fillStyle='#ffffff';ctx.font='800 '+Math.round(W*0.05)+'px Inter';ctx.fillText('water backs up under shingles',W/2,A.textBottom-W*0.02);ctx.globalAlpha=1;}"
+  },
+  {
+   "type": "list",
+   "start": 0,
+   "end": 4,
+   "text": "Check yours for",
+   "items": [
+    "Water spilling over",
+    "Sagging gutters",
+    "Plants growing up top"
+   ]
+  },
+  {
+   "type": "cta",
+   "start": 0,
+   "end": 3,
+   "text": "Free *inspection*",
+   "subtext": "Text 204-972-0325"
+  }
+ ]
+}
