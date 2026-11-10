@@ -12,9 +12,18 @@ export const SCENES_DOC = `Scene types (scenes play back-to-back; durations 1.5-
 - before_after: {image (before), image2 (after), text?} wipe reveal — needs BOTH images.
 - cta: {text, subtext (phone/offer)} end card. LAST scene.
 - clip: {video (mp4 URL) OR ai_prompt, text?, dim?} real AI footage. With a video worker connected, ai_prompt generates it (open model on the user's free GPU). Best uses: the problem in motion (water pouring over a clogged gutter), the satisfying payoff (clean gutter, water flowing). One continuous 2-5s shot; describe subject, action, camera move, light, lens.
+- pov: {text, subtext?, image?} TikTok-style "POV:" top plate over a photo/backdrop.
+- myth_fact: {text (myth), subtext (fact), image?} myth gets struck through, fact slams in. Great hook #2.
+- compare: {text (title), subtext "Left|Right" headers, items (left ✕), items2 (right ✓)} side-by-side.
+- steps: {text (title), items[3-5]} numbered process with a growing line.
+- price: {text (service), value (REAL price only), subtext?, items (what's included)} price card with shine.
+- quote: {text, subtext (who said it — owner/tip only, NEVER an invented customer review)} big quote card.
+- map: {text (tagline), items (place names)} pins drop on a stylized map with a route.
 - code: {code} YOUR OWN animation, run in a sandbox every frame. Use it for what templates can't do: water backing up a gutter, ice building on eaves, snow piling on a roof, a price tag flipping, a map pin dropping on Steinbach, a chart growing, physics typography.
 Per-scene: transition cut|fade|slide|zoom (vary), dim 0..1 (overlay darkness on photos).
-Top level: {brand_name, handle, theme:{bg,fg,accent,accent2,display_font:"Anton"|"Inter"}, music:"pulse"|"ambient"|"none", voiceover?:{script, voice?}, assets?:{key:url}, scenes:[...]}
+Top level: {brand_name, handle, theme:{bg,fg,accent,accent2,display_font:"Anton"|"Inter"}, music:"upbeat"|"chill"|"hype"|"cinematic"|"none", sfx:true, caption_style:"pop"|"box"|"karaoke"|"minimal", finish:true, voiceover?:{script, voice?}, assets?:{key:url}, scenes:[...]}
+Music is homemade (synthesized chords, drums, bass), ducked under the voice automatically; without voiceover, cuts snap to the beat. SFX (whoosh on slide/zoom, pops on hook words, clicks on list/steps items, riser + impact into the CTA) are placed automatically. finish adds grain, vignette and handheld drift/shake.
+Tip: for maximum reach on IG/TikTok you can set music:"none" and add a trending sound in-app; keep sfx on.
 AI footage tip: generate_clip can animate a real photo (image_url) or a graphic you coded (image_spec) — the most reliable way to get on-brand motion.
 Images: only REAL photo URLs (the owner's job photos, their website/Instagram images) or none — draw everything else in code scenes. Reference photos by URL directly in scene.image or via assets keys.
 Voiceover (homemade TTS, word-highlighted captions): BEST = give each scene its own "vo" line — the scene is timed to that line so cuts land on the words (a scene without vo keeps its own length, silent). Alternative: one top-level voiceover.script (scenes get stretched evenly). ~2.6 words/sec; on-screen text should complement the line, not repeat it. Voices: am_michael (default), am_adam, am_fenrir, am_puck, af_heart, af_bella, af_nicole, af_sarah, bm_george, bf_emma.`;
@@ -43,6 +52,15 @@ You are writing like the best short-form creative on ${p.label}, for a real loca
 
 ## Angles to try (write 3, keep the strongest)
 ${ANGLES.map((a) => `- ${a}`).join("\n")}
+
+## Proven formats (pick one, don't invent structure)
+- **Problem → Agitate → Fix**: hook (the problem) → code/clip (show it happening) → myth_fact or stat (why it's worse than they think) → steps or image (the fix) → cta.
+- **3 Signs**: hook ("3 signs your … ") → list or 3 quick image scenes → cta. Saves + shares.
+- **Myth vs Fact**: myth_fact as scene 1–2 → explain in code/image → cta.
+- **POV**: pov ("POV: you skipped gutter cleaning in October") → consequence clip/code → fix → cta. Relatable, comment bait.
+- **Before → After**: hook → before_after (real photos) → stat/price → cta. Strongest proof for service businesses.
+- **Price transparency**: hook ("What gutter cleaning actually costs in Winnipeg") → price (real numbers) → compare (DIY vs pro) → cta.
+- **Service area**: hook → map (towns) → steps (how booking works) → cta.
 
 ## Rubric (score yourself 0-10 per line, harshly: 5 average, 7 solid, 8 strong, 9 top 5%)
 ${RUBRIC.map((r) => `- ${r.key} (${Math.round(r.weight * 100)}%): ${r.desc}`).join("\n")}

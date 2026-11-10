@@ -1,4 +1,4 @@
-export type SceneType = "hook" | "image" | "list" | "stat" | "before_after" | "cta" | "clip" | "code";
+export type SceneType = "hook" | "image" | "list" | "stat" | "before_after" | "cta" | "clip" | "code" | "pov" | "myth_fact" | "compare" | "steps" | "price" | "quote" | "map";
 
 export interface Scene {
   type: SceneType;
@@ -8,6 +8,8 @@ export interface Scene {
   text?: string;
   subtext?: string;
   items?: string[];
+  /** compare scene: right-hand column */
+  items2?: string[];
   /** stat scene, e.g. "40 lbs" or "$150" — the number counts up */
   value?: string;
   /** image URL or a key in spec.assets */
@@ -50,7 +52,12 @@ export interface VideoSpec {
   scenes: Scene[];
   captions?: Caption[];
   voiceover?: { script: string; voice?: string };
-  music?: "none" | "pulse" | "ambient";
+  music?: "none" | "upbeat" | "chill" | "hype" | "cinematic" | "pulse" | "ambient";
+  /** auto sound effects (whoosh, pops, clicks, riser, impact) — default on */
+  sfx?: boolean;
+  caption_style?: "pop" | "box" | "karaoke" | "minimal";
+  /** film finishing: grain, vignette, camera drift/shake — default on */
+  finish?: boolean;
   progress_bar?: boolean;
 }
 
@@ -70,7 +77,7 @@ export function normalizeSpec(s: Partial<VideoSpec>, defaults: Partial<VideoSpec
   // Body text must be readable on the background no matter what colour the model picked.
   if (contrastHex(theme.fg, theme.bg) < 7) theme.fg = contrastHex("#ffffff", theme.bg) >= contrastHex("#111111", theme.bg) ? "#ffffff" : "#111111";
 
-  const types: SceneType[] = ["hook", "image", "list", "stat", "before_after", "cta", "clip", "code"];
+  const types: SceneType[] = ["hook", "image", "list", "stat", "before_after", "cta", "clip", "code", "pov", "myth_fact", "compare", "steps", "price", "quote", "map"];
   let scenes = (s.scenes || []).filter((x) => x && types.includes(x.type));
   if (!scenes.length) scenes = [{ type: "hook", start: 0, end: 3, text: s.brand_name || "Hello" }];
   // Coerce whatever shape the model returned into strings/arrays the renderer expects.
@@ -81,6 +88,7 @@ export function normalizeSpec(s: Partial<VideoSpec>, defaults: Partial<VideoSpec
     text: str(sc.text), subtext: str(sc.subtext), value: str(sc.value), image: str(sc.image), image2: str(sc.image2),
     video: str(sc.video), code: str(sc.code), image_prompt: str(sc.image_prompt), vo: str(sc.vo), ai_prompt: str(sc.ai_prompt),
     items: Array.isArray(sc.items) ? sc.items.map((x: any) => str(x) || "").filter(Boolean).slice(0, 6) : undefined,
+    items2: Array.isArray(sc.items2) ? sc.items2.map((x: any) => str(x) || "").filter(Boolean).slice(0, 6) : undefined,
     dim: typeof sc.dim === "number" ? Math.max(0, Math.min(0.97, sc.dim)) : undefined,
   }));
   const assetsIn: Record<string, string> = {};
@@ -108,6 +116,9 @@ export function normalizeSpec(s: Partial<VideoSpec>, defaults: Partial<VideoSpec
     captions: s.captions,
     voiceover: s.voiceover,
     music: s.music || "none",
+    sfx: s.sfx ?? true,
+    caption_style: s.caption_style || "pop",
+    finish: s.finish ?? true,
     progress_bar: s.progress_bar ?? true,
   };
 }

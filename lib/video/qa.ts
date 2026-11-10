@@ -38,7 +38,7 @@ export function technicalChecks(spec: VideoSpec, r: RenderResult, platform: Plat
   add("no_dead_air_scenes", longScenes.length === 0, longScenes.length ? `${longScenes.length} static scenes >5s` : "ok", 4);
 
   spec.scenes.forEach((s, i) => {
-    const words = wordsOf(s.text).length + wordsOf(s.subtext).length + (s.items || []).reduce((n, it) => n + wordsOf(it).length, 0);
+    const words = wordsOf(s.text).length + wordsOf(s.subtext).length + [...(s.items || []), ...(s.items2 || [])].reduce((n, it) => n + wordsOf(it).length, 0);
     const wps = words / Math.max(0.5, s.end - s.start - 0.3);
     if (wps > 3.6) {
       add(`readable_scene_${i + 1}`, false, `scene ${i + 1}: ${words} words in ${round(s.end - s.start)}s (${round(wps)} words/s > 3.5)`, 4);
@@ -53,7 +53,7 @@ export function technicalChecks(spec: VideoSpec, r: RenderResult, platform: Plat
     if (c < 3.5) {
       add(`contrast_scene_${scene + 1}`, false, `scene ${scene + 1}: text contrast ${c}:1 (need ≥4.5:1)`, c < 2.2 ? 8 : 5);
       const sc = spec.scenes[scene];
-      if (sc && ["hook", "image", "list", "stat", "clip", "before_after"].includes(sc.type)) auto.push({ scene, fix: "dim", detail: `${c}:1` });
+      if (sc && ["hook", "image", "list", "stat", "clip", "before_after", "pov", "myth_fact", "steps", "quote"].includes(sc.type)) auto.push({ scene, fix: "dim", detail: `${c}:1` });
     }
   }
   if (!worst.size) add("contrast_measured", true, "no text boxes sampled", 0);

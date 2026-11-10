@@ -9,6 +9,7 @@ import { publicBase, TMP } from "../storage";
 import type { Platform } from "../platforms";
 import { ffmpegPath, renderVideo, type RenderResult } from "./render";
 import { ensureStructure, normalizeSpec, retime, type VideoSpec } from "./spec";
+import { snapToBeats } from "./audio";
 import { technicalChecks } from "./qa";
 import { captionsFromWords, synthesize } from "./voice";
 import { clipSize, parseWorker, submitClip, waitClips } from "./worker";
@@ -93,7 +94,7 @@ export async function produceVideo(input: Partial<VideoSpec>, o: { platform?: Pl
         if (vo) {
           voice = vo.provider;
           // Long enough to hear the line AND read the on-screen text.
-          const onScreen = [sc.text, sc.subtext, sc.value, ...(sc.items || [])].filter(Boolean).join(" ").split(/\s+/).filter(Boolean).length;
+          const onScreen = [sc.text, sc.subtext, sc.value, ...(sc.items || []), ...(sc.items2 || [])].filter(Boolean).join(" ").split(/\s+/).filter(Boolean).length;
           dur = Math.max(sc.type === "cta" ? 2.6 : 1.2, vo.duration + 0.25, onScreen / 3.3 + 0.5);
           const lead = 0.08;
           parts.push(`-i`, vo.file);
@@ -130,6 +131,7 @@ export async function produceVideo(input: Partial<VideoSpec>, o: { platform?: Pl
       spec.captions = captionsFromWords(vo.words);
     }
   }
+  spec = snapToBeats(spec);
   const render = await renderVideo(spec, { out, voiceoverFile: voFile });
   // Serverless responses are capped (~4.5 MB on Vercel): shrink if needed so links always play.
   if (statSync(out).size > 4.3e6) {

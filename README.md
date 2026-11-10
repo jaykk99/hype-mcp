@@ -10,12 +10,16 @@ Plug it into Claude. Give it a company name, website or channel, and it research
 | Firecrawl / search APIs | Own crawler: site + inner pages, social OG metadata, YouTube RSS, DuckDuckGo HTML |
 | Image generator | Graphics **Claude codes** in a sandbox, plus your real job photos |
 | Runway / Kling / Sora (AI footage) | **Hype Video Worker**: open models (LTX-Video, Wan 2.1) on *your own* free Kaggle/Colab GPU → `generate_clip` |
+| Music library / SFX packs (Epidemic, Artlist) | **Own synth**: chord progressions, drums, bass in 4 styles; auto SFX (whoosh, pops, clicks, riser, impact); voice ducking; −14 LUFS loudness; beat-snapped cuts |
 | Video editor / renderer | Own renderer: Skia canvas + sandboxed animation code + ffmpeg → MP4 |
 | ElevenLabs | **Kokoro-82M** (Apache-2.0) TTS running on the server's CPU, with word-highlighted captions |
 | Vision QA model | Pixel measurements (real contrast, overlap, safe zones, blank frames), plus Claude reviewing the returned frames |
 | S3 / Blob storage | **Spec-in-the-link:** the URL carries the recipe, the server re-renders on request (deterministic, cached). Links never expire |
 
 The only download is Kokoro's open model weights (~90 MB) from the public model hub on first use. Keys in `.env.example` are optional upgrades that let the server run fully autonomously without Claude.
+
+### Finishing
+Film grain, vignette, handheld camera drift and a shake on hook hits. Captions come in 4 styles: `pop` (default, bold creator style), `box`, `karaoke` and `minimal`. The playbook has 7 proven formats (Problem→Agitate→Fix, 3 Signs, Myth vs Fact, POV, Before→After, Price transparency, Service area).
 
 ### AI video generator (homemade)
 `worker/hype_video_worker.ipynb` turns a free Kaggle (GPU T4 x2, Internet on) or Colab (T4) session into your own text→video / image→video generator:
@@ -49,7 +53,7 @@ See `examples/` for real specs (the Gutter Genie freeze-up reel with two coded a
 
 1. **Direct:** the model writes a scene timeline: hook → proof → value → CTA, a pattern interrupt every 2–3s, and on-screen text written for people watching muted.
 2. **Code:** for moments templates can't do (water backing up a gutter, ice building, a price spinning, a chart), it **writes its own canvas animation code**. That code runs inside a **QuickJS WebAssembly sandbox** with no access to files, network or process. It only produces a list of drawing commands, which are replayed through a whitelist. A crash or infinite loop is cut off after 250 ms per frame and the scene falls back to a template.
-3. **Templates:** kinetic hook type with highlighted words, Ken Burns photos, animated checklists, counting stats, before/after wipe, pulsing CTA card, plus fade/slide/zoom/cut transitions and a progress bar.
+3. **Templates:** POV, myth vs fact, compare, numbered steps, price card, quote, service-area map, kinetic hook type with highlighted words, Ken Burns photos, animated checklists, counting stats, before/after wipe, pulsing CTA card, plus fade/slide/zoom/cut transitions and a progress bar.
 4. **Footage:** generates photos per scene. With `FAL_KEY`, it can animate chosen scenes into real AI video clips, which are decoded and composited frame by frame.
 5. **Sound:** voiceover (ElevenLabs with character timestamps for **exact word-highlighted captions**, or any OpenAI-compatible TTS), scenes retimed to the voice, and a generated royalty-free music bed.
 6. **Render:** Skia canvas → raw frames → ffmpeg H.264/AAC MP4 (540p / 720p / 1080p).

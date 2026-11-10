@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { compileScene, replay, type CompiledScene } from "./sandbox";
 import type { Scene, VideoSpec } from "./spec";
+import { synthMusic, synthSfx, writeWav } from "./audio";
 
 // ---------- fonts ----------
 let fontsReady = false;
@@ -206,6 +207,31 @@ export async function renderVideo(
   const mctx = main.getContext("2d");
   const off = [createCanvas(W, H), createCanvas(W, H)];
   const clipCanvas = createCanvas(W, H);
+  const finish = spec.finish !== false;
+  const vignette = createCanvas(W, H);
+  {
+    const v = vignette.getContext("2d");
+    const g = v.createRadialGradient(W / 2, H * 0.45, Math.min(W, H) * 0.35, W / 2, H * 0.45, Math.hypot(W, H) * 0.62);
+    g.addColorStop(0, "rgba(0,0,0,0)");
+    g.addColorStop(1, "rgba(0,0,0,0.42)");
+    v.fillStyle = g;
+    v.fillRect(0, 0, W, H);
+  }
+  const grains = [0, 1, 2].map((k) => {
+    const gw = Math.ceil(W / 3), gh = Math.ceil(H / 3);
+    const c = createCanvas(gw, gh);
+    const gx = c.getContext("2d");
+    const img = gx.createImageData(gw, gh);
+    let seed = 1234 + k * 999;
+    for (let i = 0; i < img.data.length; i += 4) {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      const v = 128 + ((seed >> 8) % 90) - 45;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
+      img.data[i + 3] = 255;
+    }
+    gx.putImageData(img, 0, 0);
+    return c;
+  });
 
   const qaTimes = (opts.qaTimes || defaultQaTimes(spec)).map((t) => Math.min(total - 1, Math.round(t * fps)));
   const qaSet = new Set(qaTimes);
@@ -218,17 +244,35 @@ export async function renderVideo(
   const enc = opts.still ? null : startEncoder();
   function startEncoder() {
   const args = ["-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgba", "-s", `${W}x${H}`, "-r", String(fps), "-i", "-"];
-  let audioInputs = 0;
+  // Homemade audio: synthesized music bed + auto-placed SFX, music ducked under the voice.
+  const ins: { label: string; file: string }[] = [];
   const vo = opts.voiceoverFile && existsSync(opts.voiceoverFile);
-  if (vo) { args.push("-i", opts.voiceoverFile!); audioInputs++; }
-  const music = spec.music && spec.music !== "none" ? musicExpr(spec.music, spec.duration) : null;
-  if (music) { args.push("-f", "lavfi", "-i", music); audioInputs++; }
-  if (vo && music) {
-    args.push("-filter_complex", `[2:a]volume=0.16[m];[1:a]volume=1.0[v];[v][m]amix=inputs=2:duration=longest:normalize=0,aresample=44100,aformat=channel_layouts=stereo,afade=t=out:st=${Math.max(0, spec.duration - 0.8)}:d=0.8[a]`, "-map", "0:v", "-map", "[a]");
-  } else if (vo) {
-    args.push("-map", "0:v", "-map", "1:a", "-ar", "44100", "-ac", "2");
-  } else if (music) {
-    args.push("-filter_complex", `[1:a]volume=0.5,afade=t=out:st=${Math.max(0, spec.duration - 1)}:d=1[a]`, "-map", "0:v", "-map", "[a]");
+  if (vo) ins.push({ label: "vo", file: opts.voiceoverFile! });
+  const tmpBase = opts.out.replace(/\.mp4$/, "");
+  if (!opts.still) {
+    const m = spec.music && spec.music !== "none" ? synthMusic(spec.music as any, spec.duration, spec.duration * 1000) : null;
+    if (m) ins.push({ label: "m", file: writeWav(`${tmpBase}_music.wav`, m, 0.8) });
+    if (spec.sfx !== false) ins.push({ label: "s", file: writeWav(`${tmpBase}_sfx.wav`, synthSfx(spec), 0.85) });
+  }
+  for (const a of ins) args.push("-i", a.file);
+  const audioInputs = ins.length;
+  if (audioInputs) {
+    const idx = (l: string) => ins.findIndex((a) => a.label === l) + 1;
+    const parts: string[] = [];
+    const mix: string[] = [];
+    const hasVo = idx("vo") > 0, hasM = idx("m") > 0, hasS = idx("s") > 0;
+    if (hasVo && hasM) {
+      parts.push(`[${idx("vo")}:a]aresample=44100,aformat=channel_layouts=stereo,asplit=2[vo1][vo2]`);
+      parts.push(`[${idx("m")}:a]volume=0.42[m1]`);
+      parts.push(`[m1][vo2]sidechaincompress=threshold=0.02:ratio=9:attack=15:release=380[md]`);
+      mix.push("[vo1]", "[md]");
+    } else {
+      if (hasVo) { parts.push(`[${idx("vo")}:a]aresample=44100,aformat=channel_layouts=stereo[vo1]`); mix.push("[vo1]"); }
+      if (hasM) { parts.push(`[${idx("m")}:a]volume=0.6[md]`); mix.push("[md]"); }
+    }
+    if (hasS) { parts.push(`[${idx("s")}:a]volume=${hasVo ? 0.55 : 0.75}[sx]`); mix.push("[sx]"); }
+    parts.push(`${mix.join("")}amix=inputs=${mix.length}:normalize=0:duration=longest,aresample=44100,aformat=channel_layouts=stereo,afade=t=out:st=${Math.max(0, spec.duration - 0.7)}:d=0.7,loudnorm=I=-14:TP=-1.5:LRA=11,aresample=44100[a]`);
+    args.push("-filter_complex", parts.join(";"), "-map", "0:v", "-map", "[a]");
   }
   args.push("-c:v", "libx264", "-preset", process.env.X264_PRESET || "veryfast", "-crf", "21", "-pix_fmt", "yuv420p", "-r", String(fps));
   if (audioInputs) args.push("-c:a", "aac", "-b:a", "160k");
@@ -268,6 +312,13 @@ export async function renderVideo(
           break;
         }
         case "cta": drawCta(env); break;
+        case "pov": drawPov(env, img(s.image)); break;
+        case "myth_fact": drawMythFact(env, img(s.image)); break;
+        case "compare": drawCompare(env); break;
+        case "steps": drawSteps(env, img(s.image)); break;
+        case "price": drawPrice(env); break;
+        case "quote": drawQuote(env, img(s.image)); break;
+        case "map": drawMap(env); break;
         case "clip": {
           const reader = clips.get(i);
           const fr = reader ? await reader.frameAt(Math.floor(lt * fps)) : null;
@@ -330,9 +381,27 @@ export async function renderVideo(
       }
     } else {
       await drawScene(off[0], i, lt, f, isQa);
-      mctx.drawImage(off[0] as any, 0, 0);
+      if (finish) {
+        // Handheld-camera feel: slow drift, plus a short shake on hook/CTA/myth-fact hits.
+        const z = 1.012 + 0.008 * Math.sin(t * 0.6);
+        let dx = Math.sin(t * 0.9) * W * 0.004, dy = Math.cos(t * 0.7) * H * 0.003;
+        if ((s.type === "hook" || s.type === "cta") && lt < 0.22) {
+          const k = (0.22 - lt) / 0.22;
+          dx += Math.sin(f * 2.1) * W * 0.012 * k;
+          dy += Math.cos(f * 1.7) * W * 0.012 * k;
+        }
+        mctx.drawImage(off[0] as any, (W - W * z) / 2 + dx, (H - H * z) / 2 + dy, W * z, H * z);
+      } else mctx.drawImage(off[0] as any, 0, 0);
     }
     mctx.restore();
+    if (finish) {
+      mctx.drawImage(vignette as any, 0, 0);
+      mctx.save();
+      mctx.globalAlpha = 0.07;
+      mctx.globalCompositeOperation = "overlay";
+      mctx.drawImage(grains[f % 3] as any, 0, 0, W, H);
+      mctx.restore();
+    }
 
     // Global overlays: captions + progress bar.
     if (spec.captions?.length) drawCaptions(mctx, spec, t, W, H, isQa ? boxes : null, i);
@@ -717,42 +786,332 @@ function drawCta(e: Env) {
 function drawCaptions(ctx: SKRSContext2D, spec: VideoSpec, t: number, W: number, H: number, boxes: TextBox[] | null, scene: number) {
   const cap = spec.captions!.find((c) => t >= c.start && t < c.end);
   if (!cap) return;
+  const style = spec.caption_style || "pop";
   const words = cap.words?.length ? cap.words : cap.text.split(/\s+/).map((w, i, a) => ({ w, start: cap.start + ((cap.end - cap.start) * i) / a.length, end: cap.start + ((cap.end - cap.start) * (i + 1)) / a.length }));
-  const size = Math.round(W * 0.062);
+  const size = Math.round(W * (style === "minimal" ? 0.052 : style === "pop" ? 0.072 : 0.062));
   ctx.save();
-  ctx.font = `800 ${size}px Inter`;
-  const space = ctx.measureText(" ").width;
+  const font = style === "pop" ? `${size}px Anton` : `800 ${size}px Inter`;
+  ctx.font = font;
+  const upper = style === "pop";
+  const show = (w: string) => (upper ? w.toUpperCase() : w);
+  const space = Math.max(ctx.measureText(" ").width, size * (style === "pop" ? 0.4 : 0.3));
   const maxW = W - 180;
   const lines: (typeof words)[] = [];
   let line: typeof words = [], lw = 0;
   for (const w of words) {
-    const ww = ctx.measureText(w.w).width;
+    const ww = ctx.measureText(show(w.w)).width;
     if (line.length && lw + space + ww > maxW) { lines.push(line); line = [w]; lw = ww; } else { lw += (line.length ? space : 0) + ww; line.push(w); }
   }
   if (line.length) lines.push(line);
-  const lh = size * 1.25;
+  const lh = size * (style === "pop" ? 1.08 : 1.25);
   const y0 = H * 0.765 - (lines.length * lh) / 2;
-  const widths = lines.map((l) => l.reduce((s, w, j) => s + ctx.measureText(w.w).width + (j ? space : 0), 0));
+  const widths = lines.map((l) => l.reduce((s, w, j) => s + ctx.measureText(show(w.w)).width + (j ? space : 0), 0));
   const bw = Math.max(...widths) + 60;
-  ctx.fillStyle = "rgba(0,0,0,0.62)";
-  ctx.beginPath();
-  ctx.roundRect(W / 2 - bw / 2, y0 - 18, bw, lines.length * lh + 30, 22);
-  ctx.fill();
-  if (boxes) {
-    boxes.push({ x: W / 2 - bw / 2, y: y0 - 18, w: bw, h: lines.length * lh + 30, color: "#ffffff", bgLum: 0.02, contrast: 15, scene, t: Math.round(t * 100) / 100, caption: true });
+  const appear = Math.min(1, (t - cap.start) / 0.12);
+  if (style === "box" || style === "karaoke") {
+    ctx.fillStyle = "rgba(0,0,0,0.62)";
+    ctx.beginPath();
+    ctx.roundRect(W / 2 - bw / 2, y0 - 18, bw, lines.length * lh + 30, 22);
+    ctx.fill();
   }
+  if (boxes) boxes.push({ x: W / 2 - bw / 2, y: y0 - 18, w: bw, h: lines.length * lh + 30, color: "#ffffff", bgLum: 0.02, contrast: 15, scene, t: Math.round(t * 100) / 100, caption: true });
+  // Active-word color must stand out from whatever is behind it (e.g. the accent-colored CTA card).
+  const onAccentScene = spec.scenes[scene]?.type === "cta";
+  const accent = onAccentScene || lum(hexToRgb(spec.theme.accent)) < 0.08 ? "#ffe14d" : spec.theme.accent;
   lines.forEach((l, li) => {
     let x = W / 2 - widths[li] / 2;
     for (const w of l) {
       const active = t >= w.start && t < w.end;
-      const ww = ctx.measureText(w.w).width;
-      ctx.fillStyle = active ? spec.theme.accent : "#ffffff";
-      if (active && lum(hexToRgb(spec.theme.accent)) < 0.08) ctx.fillStyle = "#ffd54a";
-      ctx.fillText(w.w, x, y0 + li * lh + size * 0.92);
+      const txt = show(w.w);
+      const ww = ctx.measureText(txt).width;
+      const by = y0 + li * lh + size * 0.92;
+      ctx.save();
+      ctx.globalAlpha = appear;
+      if (style === "karaoke" && active) {
+        ctx.fillStyle = accent;
+        ctx.beginPath();
+        ctx.roundRect(x - 10, by - size * 0.95, ww + 20, size * 1.2, 12);
+        ctx.fill();
+      }
+      const sc = style === "pop" && active ? 1.08 : 1;
+      ctx.translate(x + ww / 2, by - size * 0.35);
+      ctx.scale(sc, sc);
+      if (style === "pop" || style === "minimal") {
+        ctx.lineJoin = "round";
+        ctx.lineWidth = size * (style === "pop" ? 0.2 : 0.12);
+        ctx.strokeStyle = "rgba(0,0,0,0.92)";
+        ctx.strokeText(txt, -ww / 2, size * 0.35);
+      }
+      ctx.fillStyle = style === "karaoke" ? (active ? pickOn(accent) : "#ffffff") : active ? accent : "#ffffff";
+      ctx.fillText(txt, -ww / 2, size * 0.35);
+      ctx.restore();
       x += ww + space;
     }
   });
   ctx.restore();
+}
+
+// ---------- new templates ----------
+function plate(ctx: SKRSContext2D, x: number, y: number, w: number, h: number, r: number, color: string) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, r);
+  ctx.fill();
+}
+function pill(e: Env, label: string, cx: number, cy: number, bg: string, k = 1) {
+  const { ctx, W } = e;
+  ctx.save();
+  ctx.globalAlpha = k;
+  ctx.font = `800 ${Math.round(W * 0.042)}px Inter`;
+  const w = ctx.measureText(label).width + W * 0.07, h = W * 0.075;
+  plate(ctx, cx - w / 2, cy - h / 2, w, h, h / 2, bg);
+  ctx.fillStyle = pickOn(bg.startsWith("#") ? bg : "#000000");
+  ctx.textAlign = "center";
+  ctx.fillText(label, cx, cy + W * 0.015);
+  ctx.restore();
+}
+const bottomZone = (e: Env) => (caps(e) ? e.H * 0.64 : e.H * 0.76);
+
+function drawPov(e: Env, im?: Image) {
+  const { ctx, W, H, s } = e;
+  if (im) { kenBurns(e, im); overlayGradient(ctx, W, H, s.dim ?? 0.45); } else brandBackdrop(e);
+  const k = ease.out(e.lt / 0.3);
+  ctx.save();
+  ctx.globalAlpha = k;
+  plate(ctx, 60, H * 0.11, W - 120, H * 0.2, 28, "rgba(0,0,0,0.72)");
+  ctx.restore();
+  pill(e, "POV", W / 2, H * 0.11, e.spec.theme.accent, k);
+  richText({ ...e, lt: e.lt - 0.1 }, s.text || "", { cx: W / 2, cy: H * 0.215, maxW: W - 200, maxH: H * 0.15, maxSize: Math.round(W * 0.07), family: "Inter", weight: "800" });
+  if (s.subtext) richText({ ...e, lt: e.lt - 0.6 }, s.subtext, { cx: W / 2, cy: bottomZone(e) - H * 0.06, maxW: W - 200, maxH: H * 0.1, maxSize: Math.round(W * 0.06), family: "Inter", weight: "800" });
+}
+
+function drawMythFact(e: Env, im?: Image) {
+  const { ctx, W, H, s, spec } = e;
+  if (im) { kenBurns(e, im); overlayGradient(ctx, W, H, s.dim ?? 0.88); } else brandBackdrop(e);
+  const mid = (H * 0.12 + bottomZone(e)) / 2;
+  pill(e, "MYTH", W / 2, H * 0.16, "#555555", ease.out(e.lt / 0.25));
+  const r = richText(e, s.text || "", { cx: W / 2, cy: (H * 0.16 + mid) / 2 + H * 0.02, maxW: W - 180, maxH: mid - H * 0.24, maxSize: Math.round(W * 0.075), family: "Inter", weight: "800", color: "#e0e0e0" });
+  const sk = ease.inOut((e.p - 0.3) / 0.15);
+  if (sk > 0) {
+    ctx.strokeStyle = spec.theme.accent;
+    ctx.lineWidth = Math.max(6, W * 0.012);
+    ctx.lineCap = "round";
+    const y = (r.top + r.bottom) / 2;
+    ctx.beginPath();
+    ctx.moveTo(110, y);
+    ctx.lineTo(110 + (W - 220) * sk, y + 6);
+    ctx.stroke();
+  }
+  const fk = (e.lt - e.dur * 0.45);
+  if (fk > 0) {
+    ctx.fillStyle = "rgba(255,255,255,0.18)";
+    ctx.fillRect(W * 0.2, mid, W * 0.6 * ease.out(fk / 0.3), 3);
+    pill(e, "FACT", W / 2, mid + H * 0.05, "#2e7d32", ease.back(fk / 0.3));
+    richText({ ...e, lt: fk - 0.1 }, s.subtext || "", { cx: W / 2, cy: (mid + H * 0.1 + bottomZone(e)) / 2, maxW: W - 180, maxH: bottomZone(e) - mid - H * 0.12, maxSize: Math.round(W * 0.075), family: "Inter", weight: "800", pop: false });
+  }
+}
+
+function drawCompare(e: Env) {
+  const { ctx, W, H, s, spec } = e;
+  brandBackdrop(e);
+  const r = s.text ? richText(e, s.text, { cx: W / 2, cy: H * 0.16, maxW: W - 160, maxH: H * 0.1, maxSize: Math.round(W * 0.09), family: spec.theme.display_font || "Anton", upper: true }) : { bottom: H * 0.12 };
+  const [hl, hr] = (s.subtext || "Without|With").split("|");
+  const colW = (W - 150) / 2;
+  const top = r.bottom + H * 0.04;
+  const L = s.items || [], R = s.items2 || [];
+  const n = Math.max(L.length, R.length, 1);
+  const rowH = Math.min(H * 0.1, (bottomZone(e) - top - H * 0.07) / n);
+  [[hl, 60, "#3a3a3f", L, false], [hr, 90 + colW, spec.theme.accent, R, true]].forEach(([head, x0, col, list, good]: any, c) => {
+    const k = ease.out((e.lt - c * 0.25) / 0.35);
+    ctx.save();
+    ctx.globalAlpha = k;
+    plate(ctx, x0, top, colW, H * 0.06, 18, col);
+    ctx.fillStyle = pickOn(col);
+    ctx.font = `800 ${Math.round(W * 0.042)}px Inter`;
+    ctx.textAlign = "center";
+    ctx.fillText(String(head || "").toUpperCase().slice(0, 18), x0 + colW / 2, top + H * 0.04);
+    ctx.restore();
+    (list as string[]).forEach((it, j) => {
+      const at = 0.4 + (j * 2 + c) * ((e.dur * 0.6) / (n * 2));
+      const kk = ease.out((e.lt - at) / 0.3);
+      if (kk <= 0) return;
+      const y = top + H * 0.08 + j * rowH + rowH / 2;
+      ctx.save();
+      ctx.globalAlpha = kk;
+      ctx.fillStyle = good ? "#2e7d32" : "#c62828";
+      ctx.beginPath();
+      ctx.arc(x0 + 28, y, rowH * 0.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#fff";
+      ctx.font = `800 ${Math.round(rowH * 0.3)}px Inter`;
+      ctx.textAlign = "center";
+      ctx.fillText(good ? "✓" : "✕", x0 + 28, y + rowH * 0.1);
+      ctx.restore();
+      richText({ ...e, lt: e.lt - at }, it, { cx: 0, cy: y, maxW: colW - 80, maxH: rowH * 0.9, maxSize: Math.round(rowH * 0.34), family: "Inter", weight: "800", align: "left", x: x0 + 64 });
+    });
+  });
+}
+
+function drawSteps(e: Env, im?: Image) {
+  const { ctx, W, H, s, spec } = e;
+  if (im) { kenBurns(e, im); overlayGradient(ctx, W, H, s.dim ?? 0.88); } else brandBackdrop(e);
+  const r = s.text ? richText(e, s.text, { cx: W / 2, cy: H * 0.17, maxW: W - 160, maxH: H * 0.12, maxSize: Math.round(W * 0.1), family: spec.theme.display_font || "Anton", upper: true }) : { bottom: H * 0.12 };
+  const items = (s.items || []).slice(0, 5);
+  const slot = (e.dur * 0.8) / Math.max(1, items.length);
+  const top = r.bottom + H * 0.05;
+  const rowH = Math.min(H * 0.12, (bottomZone(e) - top) / Math.max(1, items.length));
+  const lineK = ease.inOut(e.lt / (e.dur * 0.85));
+  ctx.strokeStyle = "rgba(255,255,255,0.25)";
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.moveTo(120, top + rowH / 2);
+  ctx.lineTo(120, top + rowH / 2 + (items.length - 1) * rowH * lineK);
+  ctx.stroke();
+  items.forEach((it, j) => {
+    const at = 0.25 + j * slot;
+    const k = ease.back((e.lt - at) / 0.35);
+    if (k <= 0) return;
+    const y = top + j * rowH + rowH / 2;
+    ctx.save();
+    ctx.translate(120, y);
+    ctx.scale(k, k);
+    ctx.fillStyle = spec.theme.accent;
+    ctx.beginPath();
+    ctx.arc(0, 0, rowH * 0.32, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = pickOn(spec.theme.accent);
+    ctx.font = `${Math.round(rowH * 0.42)}px Anton`;
+    ctx.textAlign = "center";
+    ctx.fillText(String(j + 1), 0, rowH * 0.15);
+    ctx.restore();
+    richText({ ...e, lt: e.lt - at }, it, { cx: 0, cy: y, maxW: W - 300, maxH: rowH * 0.9, maxSize: Math.round(rowH * 0.36), family: "Inter", weight: "800", align: "left", x: 200 });
+  });
+}
+
+function drawPrice(e: Env) {
+  const { ctx, W, H, s, spec } = e;
+  brandBackdrop(e);
+  const k = ease.back(e.lt / 0.45);
+  const cw = W - 160, ch = Math.min(bottomZone(e) - H * 0.14, H * 0.56);
+  const cx = 80, cy = H * 0.13;
+  ctx.save();
+  ctx.translate(W / 2, cy + ch / 2);
+  ctx.scale(0.85 + 0.15 * k, 0.85 + 0.15 * k);
+  ctx.translate(-W / 2, -(cy + ch / 2));
+  ctx.globalAlpha = Math.min(1, e.lt / 0.2);
+  ctx.shadowColor = "rgba(0,0,0,0.5)";
+  ctx.shadowBlur = 40;
+  plate(ctx, cx, cy, cw, ch, 36, "#ffffff");
+  ctx.shadowBlur = 0;
+  // shine sweep
+  const sx = cx - cw + (cw * 3) * ease.inOut((e.lt - 0.5) / 0.9);
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(cx, cy, cw, ch, 36);
+  ctx.clip();
+  const g = ctx.createLinearGradient(sx, 0, sx + cw * 0.4, 0);
+  g.addColorStop(0, "rgba(255,255,255,0)");
+  g.addColorStop(0.5, "rgba(255,255,255,0.65)");
+  g.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = spec.theme.accent;
+  ctx.fillRect(cx, cy, cw, ch * 0.2);
+  ctx.fillStyle = g;
+  ctx.fillRect(cx, cy, cw, ch);
+  ctx.restore();
+  ctx.restore();
+  const inner = { ...e, isQa: false };
+  richText({ ...inner, lt: 10 }, s.text || "", { cx: W / 2, cy: cy + ch * 0.1, maxW: cw - 80, maxH: ch * 0.14, maxSize: Math.round(W * 0.06), family: "Inter", weight: "800", upper: true, color: pickOn(spec.theme.accent), shadow: false });
+  const m = (s.value || "").match(/^([^\d]*)([\d,.]+)(.*)$/);
+  let shown = s.value || "";
+  if (m) {
+    const target = parseFloat(m[2].replace(/,/g, ""));
+    shown = m[1] + Math.round(target * ease.out((e.lt - 0.3) / 0.8)).toLocaleString("en-US") + m[3];
+  }
+  richText({ ...inner, lt: 10 }, shown, { cx: W / 2, cy: cy + ch * 0.36, maxW: cw - 80, maxH: ch * 0.24, maxSize: Math.round(W * 0.2), family: "Anton", color: "#111111", shadow: false });
+  if (s.subtext) richText({ ...inner, lt: e.lt - 0.6 }, s.subtext, { cx: W / 2, cy: cy + ch * 0.53, maxW: cw - 100, maxH: ch * 0.08, maxSize: Math.round(W * 0.04), family: "Inter", weight: "500", color: "#555555", shadow: false });
+  (s.items || []).slice(0, 4).forEach((it, j) => {
+    const at = 0.8 + j * 0.25;
+    if (e.lt < at) return;
+    const y = cy + ch * 0.66 + j * ch * 0.085;
+    ctx.fillStyle = "#2e7d32";
+    ctx.font = `800 ${Math.round(W * 0.045)}px Inter`;
+    ctx.fillText("✓", cx + 60, y + W * 0.015);
+    richText({ ...inner, lt: e.lt - at }, it, { cx: 0, cy: y, maxW: cw - 180, maxH: ch * 0.08, maxSize: Math.round(W * 0.042), family: "Inter", weight: "800", align: "left", x: cx + 120, color: "#222222", shadow: false });
+  });
+}
+
+function drawQuote(e: Env, im?: Image) {
+  const { ctx, W, H, s, spec } = e;
+  if (im) { kenBurns(e, im); overlayGradient(ctx, W, H, s.dim ?? 0.85); } else brandBackdrop(e);
+  const k = ease.back(e.lt / 0.4);
+  ctx.save();
+  ctx.globalAlpha = Math.min(1, e.lt / 0.2);
+  ctx.fillStyle = spec.theme.accent;
+  ctx.font = `${Math.round(W * 0.42 * k)}px Anton`;
+  ctx.textAlign = "center";
+  ctx.fillText("“", W / 2, H * 0.3);
+  ctx.restore();
+  const r = richText({ ...e, lt: e.lt - 0.2 }, s.text || "", { cx: W / 2, cy: H * 0.4, maxW: W - 180, maxH: H * 0.22, maxSize: Math.round(W * 0.085), family: "Inter", weight: "800", stagger: 0.05 });
+  if (s.subtext) richText({ ...e, lt: e.lt - 0.9 }, "— " + s.subtext, { cx: W / 2, cy: Math.min(bottomZone(e) - H * 0.03, r.bottom + H * 0.06), maxW: W - 220, maxH: H * 0.06, maxSize: Math.round(W * 0.045), family: "Inter", weight: "500" });
+}
+
+function drawMap(e: Env) {
+  const { ctx, W, H, s, spec } = e;
+  const g = ctx.createRadialGradient(W / 2, H * 0.4, 20, W / 2, H * 0.4, W);
+  g.addColorStop(0, "#24303f");
+  g.addColorStop(1, "#141a22");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = "rgba(255,255,255,0.06)";
+  ctx.lineWidth = 2;
+  for (let i = 0; i < 16; i++) {
+    ctx.beginPath(); ctx.moveTo(0, H * 0.1 + i * H * 0.04); ctx.lineTo(W, H * 0.1 + i * H * 0.04 + H * 0.03 * Math.sin(i)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo((i * W) / 15, H * 0.08); ctx.lineTo((i * W) / 15 + W * 0.04, bottomZone(e)); ctx.stroke();
+  }
+  const places = (s.items || []).slice(0, 5);
+  const top = H * 0.2, bot = bottomZone(e) - H * 0.12;
+  const pts = places.map((p, i) => {
+    const r1 = Math.abs(Math.sin((i + 1) * 12.9898) * 43758.5453) % 1;
+    return { name: p, x: W * (0.22 + 0.56 * (i % 2 ? 0.75 + r1 * 0.25 : r1 * 0.4)), y: top + ((bot - top) * (i + 0.5)) / Math.max(1, places.length) };
+  });
+  // dashed route
+  ctx.strokeStyle = spec.theme.accent;
+  ctx.globalAlpha = 0.6;
+  ctx.lineWidth = 6;
+  ctx.setLineDash([18, 14]);
+  const routeK = ease.inOut((e.lt - 0.5) / (e.dur * 0.6));
+  ctx.beginPath();
+  pts.forEach((p, i) => {
+    if (i === 0) ctx.moveTo(p.x, p.y);
+    else {
+      const segK = Math.max(0, Math.min(1, routeK * (pts.length - 1) - (i - 1)));
+      if (segK > 0) ctx.lineTo(pts[i - 1].x + (p.x - pts[i - 1].x) * segK, pts[i - 1].y + (p.y - pts[i - 1].y) * segK);
+    }
+  });
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.globalAlpha = 1;
+  pts.forEach((p, i) => {
+    const d = Math.min(1, Math.max(0, (e.lt - i * 0.35) / 0.5));
+    if (d <= 0) return;
+    const b = ease.back(d);
+    const y = p.y - (1 - b) * H * 0.1;
+    const pr = W * 0.035;
+    ctx.fillStyle = spec.theme.accent;
+    ctx.beginPath(); ctx.arc(p.x, y - pr * 1.5, pr, Math.PI, 0); ctx.lineTo(p.x, y); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.arc(p.x, y - pr * 1.5, pr, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.beginPath(); ctx.arc(p.x, y - pr * 1.5, pr * 0.38, 0, Math.PI * 2); ctx.fill();
+    const ring = (e.lt * 1.2 + i * 0.3) % 1;
+    ctx.globalAlpha = (1 - ring) * d;
+    ctx.strokeStyle = spec.theme.accent;
+    ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.ellipse(p.x, p.y + 4, pr * (1 + ring), pr * 0.38 * (1 + ring), 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 1;
+    const right = p.x < W * 0.55;
+    richText({ ...e, lt: e.lt - i * 0.35 - 0.2 }, p.name, { cx: 0, cy: y - pr * 1.5, maxW: W * 0.4, maxH: H * 0.05, maxSize: Math.round(W * 0.05), family: "Inter", weight: "800", align: "left", x: right ? p.x + pr * 1.5 : p.x - pr * 1.5 - W * 0.32 });
+  });
+  if (s.text) richText({ ...e, lt: e.lt - 0.8 }, s.text, { cx: W / 2, cy: bottomZone(e) - H * 0.04, maxW: W - 160, maxH: H * 0.08, maxSize: Math.round(W * 0.1), family: spec.theme.display_font || "Anton", upper: true });
 }
 
 export function writeTmp(name: string, data: Buffer) {
