@@ -1,6 +1,6 @@
 {
   "name": "hype-mcp",
-  "version": "1.0.0",
+  "version": "4.0.0",
   "private": true,
   "description": "Marketing agent MCP server: researches a brand/channel, creates posts, photos, carousels and reels, then benchmarks and rewrites its own content until it passes.",
   "scripts": {
@@ -16,7 +16,7 @@
     "ffmpeg-static": "^5.3.0",
     "jsonrepair": "^3.15.0",
     "kokoro-js": "^1.2.1",
-    "next": "15.5.6",
+    "next": "^15.5.29",
     "quickjs-emscripten": "^0.32.0",
     "react": "19.1.1",
     "react-dom": "19.1.1",

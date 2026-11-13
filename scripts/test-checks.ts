@@ -19,3 +19,14 @@ console.log("bad penalty", pen(bad), bad.filter((c) => !c.pass).map((c) => c.che
 console.log("good penalty", pen(good), good.filter((c) => !c.pass).map((c) => c.check));
 if (pen(bad) < 40 || pen(good) > 5) { console.error("FAIL"); process.exit(1); }
 console.log("PASS");
+
+// quick_video spec builder: every format builds, missing fields are named, nothing is invented.
+import { buildQuickSpec, QUICK_FORMATS } from "../lib/video/quick";
+const full = { brand_name: "B", hook: "Hook *here*", problem: "It breaks", myth: "M", fact: "F", stat_value: "40 lbs", stat_label: "of leaves", points: ["a", "b", "c"], price_service: "Clean", price_value: "$150", towns: ["Winnipeg", "Steinbach"], before_image: "https://x/b.jpg", after_image: "https://x/a.jpg", contact: "204-972-0325" };
+for (const format of QUICK_FORMATS) {
+  const r = buildQuickSpec({ ...full, format } as any);
+  if (r.missing.length || r.spec.scenes!.length < 4 || r.spec.scenes!.at(-1)!.type !== "cta") { console.error("quick FAIL", format, r.missing); process.exit(1); }
+  if (r.spec.scenes!.some((sc) => /204/.test(sc.vo || ""))) { console.error("quick FAIL: phone number in voiceover", format); process.exit(1); }
+}
+if (!buildQuickSpec({ format: "price", brand_name: "B", hook: "h" } as any).missing.length) { console.error("quick FAIL: missing price not reported"); process.exit(1); }
+console.log("quick_video PASS");

@@ -13,6 +13,7 @@ import { publish } from "./storage";
 import { PLATFORMS, type Platform } from "./platforms";
 import { makeVideo } from "./video/director";
 import { SANDBOX_API_DOC } from "./video/sandbox";
+import { buildQuickSpec, QUICK_FORMATS } from "./video/quick";
 
 const platformEnum = z.enum(["instagram", "tiktok", "facebook", "linkedin", "x", "youtube_shorts", "threads"]);
 const formatEnum = z.enum(["post", "photo", "carousel", "reel", "story"]);
@@ -68,8 +69,18 @@ function renderSummary(r: Awaited<ReturnType<typeof createPost>>, platform: Plat
 }
 
 export function buildServer() {
-  const server = new McpServer({ name: "hype-mcp", version: "3.0.0" }, { instructions: SERVER_INSTRUCTIONS });
+  const server = new McpServer({ name: "hype-mcp", version: "4.0.0" }, { instructions: SERVER_INSTRUCTIONS });
   const serverLLM = !!process.env.LLM_API_KEY;
+  // Tools that cannot run on this deployment are not listed at all. Before, a keyless server still
+  // advertised create_post / make_video / benchmark_content / content_plan / render_video_spec (need a
+  // server LLM) and render_reel / check_render (need FAL_KEY); each one only returned an error, so an
+  // assistant would try the obvious-sounding tool first and fail.
+  const NEEDS: Record<string, boolean> = {
+    create_post: serverLLM, benchmark_content: serverLLM, content_plan: serverLLM, make_video: serverLLM, render_video_spec: serverLLM,
+    render_reel: !!process.env.FAL_KEY, check_render: !!process.env.FAL_KEY,
+  };
+  const register = server.registerTool.bind(server);
+  (server as any).registerTool = (name: string, ...rest: any[]) => (NEEDS[name] === false ? undefined : (register as any)(name, ...rest));
   const needBrain = (tool: string) => ({
     isError: true,
     content: [{ type: "text" as const, text: `${tool} runs autonomously only when the server has its own LLM. No keys needed though — you are the brain: call creative_playbook, write the work yourself, then use ${tool === "make_video" ? "render_video" : "check_post / render_post_image"}.` }],
@@ -91,6 +102,12 @@ export function buildServer() {
       try {
         if (!serverLLM) {
           const { evidence, sources } = await gatherEvidence(input, extra_context);
+          if (!sources.length) {
+            return json(
+              { evidence, sources, crawled: false },
+              `Could not read anything for "${input}": the site did not respond, blocked the crawler, or the name matched nothing. Do NOT guess the brand. Try the full website URL (https://…), or research it with your own web search, or ask the user for the facts (services, towns, prices, phone, colours), then carry on with those.`
+            );
+          }
           return json(
             { evidence, sources, profile_fields: ["name", "one_liner", "what_they_sell[]", "location_or_market", "target_audience[{segment,pains[],desires[]}]", "brand_voice{tone[],do[],dont[],sample_line}", "visual_identity{colors[],style,imagery_subjects[]}", "content_pillars[{name,why}]", "proof_points[]", "offers_and_ctas[]", "competitors_or_peers[]", "content_gaps_and_opportunities[]", "banned_claims[]", "real_photo_urls[]"] },
             `Crawled ${sources.length} sources for "${input}". You are the strategist: write the brand profile from this evidence (only facts it supports; add your own web research or what the user told you). List real photo URLs found (og:image, site images) for use in graphics/videos. Pass the profile object as \`brand\` to check_post.`
@@ -206,10 +223,10 @@ export function buildServer() {
       title: "Measure a post (homemade judge)",
       description: "Runs ~25 measured checks (hook length, truncation, hashtags, clichés, invented offers vs. brand facts, superlatives, reel timing, carousel rules...) and combines them with your rubric self_scores into a 0-100 score with fixes. Be honest with self_scores — 5 is average.",
       inputSchema: {
-        brand: z.record(z.any()).describe("Brand profile object (facts used to detect invented offers)"),
+        brand: z.record(z.any()).optional().describe("Brand profile object (facts used to detect invented offers). Leave out and every price/discount/guarantee in the post is treated as unverified."),
         platform: platformEnum.default("instagram"),
         post: z.object({
-          format: formatEnum, hook: z.string(), caption: z.string(), hashtags: z.array(z.string()), cta: z.string(),
+          format: formatEnum.default("post"), hook: z.string(), caption: z.string(), hashtags: z.array(z.string()).default([]), cta: z.string().default(""),
           alt_text: z.string().optional(), image_prompt: z.string().optional(), on_image_text: z.string().optional(),
           slides: z.array(z.object({ headline: z.string(), body: z.string(), image_prompt: z.string().optional().default("") })).optional(),
           duration_s: z.number().optional(),
@@ -220,7 +237,7 @@ export function buildServer() {
     },
     async ({ brand, platform, post, self_scores }) => {
       const c = { ...post, image_prompt: post.image_prompt || (post.format === "photo" || post.format === "post" ? "graphic rendered separately via render_post_image" : undefined) } as any;
-      const checks = deterministicChecks(c, platform as Platform, brand as any);
+      const checks = deterministicChecks(c, platform as Platform, (brand || {}) as any);
       const penalty = checks.reduce((a, x) => a + x.penalty, 0);
       const hasSelf = self_scores && Object.keys(self_scores).length;
       const rubricScore = hasSelf ? Math.round(RUBRIC.reduce((a, r) => a + Math.max(0, Math.min(10, Number(self_scores![r.key] ?? 5))) * r.weight, 0) * 10) : null;
@@ -242,6 +259,77 @@ export function buildServer() {
     return c.encodeSync("jpeg", 78).toString("base64");
   };
 
+  /** The reply every video tool gives: links, what was measured, frames to review, and the editable spec. */
+  const videoResult = async (input: any, p: Awaited<ReturnType<typeof produceVideo>>, lead = "") => {
+    const { permanent, token_chars } = links(input, "v");
+    const temp = await publish(`${Date.now().toString(36)}.mp4`, p.file, "video/mp4");
+    const failed = p.checks.checks.filter((c) => !c.pass);
+    const frames = p.render.qa_frames.slice(0, 6);
+    const images = await Promise.all(frames.map(async (f) => ({ type: "image" as const, data: await thumb(f.jpeg), mimeType: "image/jpeg" })));
+    const text = [
+      lead, `## 🎬 Rendered ${p.spec.duration}s ${p.spec.width}x${p.spec.height} in ${p.render.seconds}s — technical ${p.technical}/100`,
+      permanent ? `**Permanent link:** ${permanent}` : `Spec too large for a permanent link (${token_chars} chars) — shorten code scenes.`,
+      `**Direct file (temporary):** ${temp.url}`,
+      p.voice ? `**Voiceover:** ${p.voice}, ${p.spec.captions?.length || 0} caption chunks` : "",
+      p.notes.length ? `**Auto-adjusted:** ${p.notes.join("; ")}` : "",
+      p.pending_clips?.length ? `**AI clips still generating:** ${p.pending_clips.map((c) => `scene ${c.scene + 1} → job ${c.id}`).join(", ")} — poll check_clip, put the returned url in that scene's "video", and re-render.` : "",
+      failed.length ? `**Measured failures:**\n- ${failed.map((f) => `${f.check}: ${f.detail}`).join("\n- ")}` : "**All measured checks pass.**",
+      p.checks.auto.length ? `**Suggested fixes:** ${p.checks.auto.map((a) => `scene ${a.scene + 1} → ${a.fix === "dim" ? "raise dim to ~0.9" : a.fix === "slow_down" ? "make it ~30% longer or cut words" : a.fix === "rewrite_code" ? `fix code (${a.detail})` : "replace image"}`).join("; ")}` : "",
+      `**Frames below** at ${frames.map((f) => `${f.t}s (scene ${f.scene + 1})`).join(", ")}. Review them like a ruthless creative director (thumb-stop, readability, polish, variety, brand fit), fix, and re-render until it's ≥85.`,
+    ].filter(Boolean).join("\n\n");
+    return { content: [{ type: "text" as const, text }, ...images, { type: "text" as const, text: JSON.stringify({ spec: { ...p.spec, captions: undefined }, checks: p.checks.checks }) }] };
+  };
+
+  server.registerTool(
+    "quick_video",
+    {
+      title: "Make a finished video in one call (proven format, no spec writing)",
+      description:
+        "The fastest way to a good video. Pick one of 7 proven short-form formats and give the words; the server builds the scenes, voiceover with word-highlighted captions, music, transitions and CTA card, renders the MP4, measures it and returns frames + a link + the editable spec. Use this FIRST for any video request; use render_video only when you need custom coded animation or a structure these formats lack. Every word on screen comes from your inputs, so pass only real facts (real prices, real towns, real photos). Formats and the field each one needs: problem_fix (points) · three_signs (points) · myth_fact (myth, fact) · pov (problem) · before_after (before_image, after_image) · price (price_service, price_value) · service_area (towns). Optional fields add scenes. Not read-only: renders a video.",
+      inputSchema: {
+        format: z.enum(QUICK_FORMATS),
+        brand_name: z.string(),
+        hook: z.string().describe("Scene 1, 7 words or fewer. Wrap 1-2 power words in *asterisks*. For pov, the situation: 'you skipped gutter cleaning in October'"),
+        handle: z.string().optional().describe("@handle shown on screen"),
+        cta: z.string().optional().describe("End card line, 6 words or fewer (default 'Book yours today')"),
+        contact: z.string().optional().describe("Phone, site or offer shown under the CTA"),
+        problem: z.string().optional().describe("One short line: what goes wrong / why it matters"),
+        points: z.array(z.string()).optional().describe("3-5 short lines: the steps of the fix, or the signs to watch for"),
+        points_title: z.string().optional().describe("Heading over the points (default 'How it works' / '3 signs')"),
+        myth: z.string().optional(),
+        fact: z.string().optional(),
+        stat_value: z.string().optional().describe("A REAL number, e.g. '40 lbs' or '2 hrs'"),
+        stat_label: z.string().optional().describe("What the number is"),
+        price_service: z.string().optional(),
+        price_value: z.string().optional().describe("The REAL price, e.g. '$150'"),
+        price_includes: z.array(z.string()).optional(),
+        towns: z.array(z.string()).optional().describe("2-6 place names for the service-area map"),
+        photo: z.string().optional().describe("Real photo URL used behind the hook/problem"),
+        before_image: z.string().optional(),
+        after_image: z.string().optional(),
+        colors: z.object({ bg: z.string().optional(), accent: z.string().optional(), accent2: z.string().optional() }).optional().describe("Brand hex colours"),
+        voiceover: z.boolean().optional().describe("Default true"),
+        voice: z.string().optional(),
+        music: z.enum(["upbeat", "chill", "hype", "cinematic", "none"]).optional(),
+        caption_style: z.enum(["pop", "box", "karaoke", "minimal"]).optional(),
+        platform: platformEnum.default("instagram"),
+        quality: z.enum(["draft", "standard", "hd"]).optional().describe("draft 540p, standard 720p (default), hd 1080p"),
+      },
+    },
+    async (a) => {
+      try {
+        const { spec, missing, used } = buildQuickSpec(a as any);
+        if (missing.length) return { isError: true, content: [{ type: "text" as const, text: `quick_video (${a.format}) still needs: ${missing.join("; ")}.` }] };
+        const q = { draft: { width: 540, height: 960, fps: 24 }, standard: { width: 720, height: 1280, fps: 30 }, hd: { width: 1080, height: 1920, fps: 30 } }[a.quality || "standard"];
+        const input = { ...spec, ...q };
+        const p = await produceVideo(input, { platform: a.platform as Platform, voice: a.voice, contact: a.contact });
+        return videoResult(input, p, `Built a ${a.format} video from: hook, ${used.join(", ")}, cta. To change anything, edit the spec at the end of this reply and pass it to render_video.`);
+      } catch (e) {
+        return fail(e);
+      }
+    }
+  );
+
   server.registerTool(
     "render_video",
     {
@@ -262,23 +350,7 @@ export function buildServer() {
         const q = { draft: { width: 540, height: 960, fps: 24 }, standard: { width: 720, height: 1280, fps: 30 }, hd: { width: 1080, height: 1920, fps: 30 } }[quality || "standard"];
         const input = { ...(spec as any), ...q };
         const p = await produceVideo(input, { platform: platform as Platform, voice, contact, worker, clipWaitMs: 150_000 });
-        const { permanent, token_chars } = links(input, "v");
-        const temp = await publish(`${Date.now().toString(36)}.mp4`, p.file, "video/mp4");
-        const failed = p.checks.checks.filter((c) => !c.pass);
-        const frames = p.render.qa_frames.slice(0, 6);
-        const images = await Promise.all(frames.map(async (f) => ({ type: "image" as const, data: await thumb(f.jpeg), mimeType: "image/jpeg" })));
-        const text = [
-          `## 🎬 Rendered ${p.spec.duration}s ${p.spec.width}x${p.spec.height} in ${p.render.seconds}s — technical ${p.technical}/100`,
-          permanent ? `**Permanent link:** ${permanent}` : `Spec too large for a permanent link (${token_chars} chars) — shorten code scenes.`,
-          `**Direct file (temporary):** ${temp.url}`,
-          p.voice ? `**Voiceover:** ${p.voice}, ${p.spec.captions?.length || 0} caption chunks` : "",
-          p.notes.length ? `**Auto-adjusted:** ${p.notes.join("; ")}` : "",
-          p.pending_clips?.length ? `**AI clips still generating:** ${p.pending_clips.map((c) => `scene ${c.scene + 1} → job ${c.id}`).join(", ")} — poll check_clip, put the returned url in that scene's "video", and re-render.` : "",
-          failed.length ? `**Measured failures:**\n- ${failed.map((f) => `${f.check}: ${f.detail}`).join("\n- ")}` : "**All measured checks pass.**",
-          p.checks.auto.length ? `**Suggested fixes:** ${p.checks.auto.map((a) => `scene ${a.scene + 1} → ${a.fix === "dim" ? "raise dim to ~0.9" : a.fix === "slow_down" ? "make it ~30% longer or cut words" : a.fix === "rewrite_code" ? `fix code (${a.detail})` : "replace image"}`).join("; ")}` : "",
-          `**Frames below** at ${frames.map((f) => `${f.t}s (scene ${f.scene + 1})`).join(", ")}. Review them like a ruthless creative director (thumb-stop, readability, polish, variety, brand fit), fix, and re-render until it's ≥85.`,
-        ].filter(Boolean).join("\n\n");
-        return { content: [{ type: "text" as const, text }, ...images, { type: "text" as const, text: JSON.stringify({ spec: { ...p.spec, captions: undefined }, checks: p.checks.checks }) }] };
+        return videoResult(input, p);
       } catch (e) {
         return fail(e);
       }

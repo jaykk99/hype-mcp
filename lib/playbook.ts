@@ -93,6 +93,7 @@ Workflow:
 2) creative_playbook(platform, format) — the exact standards your work is measured against. Read it before writing.
 3) Posts: write 3 angles → check_post each (with your honest self_scores) → keep the best → fix what it flags.
    Graphics: render_post_image(spec) — coded designs or real photos + headlines → PNGs + permanent links.
-   Videos: render_video(spec) — real MP4 with coded animation, voiceover + captions, music. Inspect the frames it returns, fix measured failures, re-render until ≥85.
+   Videos: start with quick_video(format, brand_name, hook, …) — one call, a proven format, finished MP4. Use render_video(spec) when you need custom coded animation.
+   render_video(spec) — real MP4 with coded animation, voiceover + captions, music. Inspect the frames it returns, fix measured failures, re-render until ≥85.
 4) Give the user the permanent links, caption and hashtags.
 If the server has its own LLM configured, create_post / make_video / content_plan also run fully autonomously.`;

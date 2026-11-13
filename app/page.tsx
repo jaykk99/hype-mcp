@@ -1,5 +1,6 @@
 const tools = [
   ["research_brand", "Crawls the site, socials, YouTube and web search → brand profile (offer, audience pains, voice, pillars, gaps, banned claims)."],
+  ["quick_video", "One call: pick a proven format, give the words, get a finished MP4 with voiceover, captions and music."],
   ["create_post", "Writes 3+ variants from different angles → benchmarks each → rewrites the winner until it clears the bar → renders + visually QA's images."],
   ["benchmark_content", "Scores any post 0–100 (yours or a competitor's) with concrete fixes."],
   ["content_plan", "Brand-specific calendar of reels, carousels and photos with hooks."],

@@ -1,4 +1,4 @@
-# Hype MCP v3: a homemade marketing studio with no keys needed
+# Hype MCP v4: a homemade marketing studio with no keys needed
 
 Plug it into Claude. Give it a company name, website or channel, and it researches the brand, writes posts, **codes and renders real MP4 videos and graphics**, then measures its own work and fixes it.
 
@@ -28,12 +28,29 @@ Film grain, vignette, handheld camera drift and a shake on hook hits. Captions c
 3. Give Claude the link. `generate_clip` makes footage (from a prompt, a real photo, or a graphic Claude coded), and `render_video` drops clips into the edit (`{"type":"clip","ai_prompt":"..."}` generates automatically).
 Clip links last while the notebook runs, so render the final MP4 before closing it. `HYPE_MODEL=mock` tests everything without a GPU.
 
+### One-call videos: `quick_video`
+Pick a proven format, give the words, get a finished MP4 (voiceover, captions, music, transitions, CTA card, measured checks, frames, link, editable spec). No spec writing.
+
+| Format | Needs | Optional extras that add scenes |
+|---|---|---|
+| `problem_fix` | `points` | `problem`, `myth`+`fact`, `stat_*`, before/after photos |
+| `three_signs` | `points` | `stat_*`, `problem` |
+| `myth_fact` | `myth`, `fact` | `problem`, `stat_*`, `points` |
+| `pov` | `problem` | `stat_*`, `myth`+`fact`, `points` |
+| `before_after` | `before_image`, `after_image` | `stat_*`, `price_*`, `points` |
+| `price` | `price_service`, `price_value` | `points`, `stat_*`, `towns` |
+| `service_area` | `towns` | `points`, `stat_*`, `price_*` |
+
+Every word on screen comes from the inputs, so nothing is invented. If a required field is missing the tool says which one.
+
+**Only tools that can run are listed.** A keyless server shows 9 tools. `create_post`, `make_video`, `benchmark_content`, `content_plan` and `render_video_spec` appear when `LLM_API_KEY` is set; `render_reel` / `check_render` appear when `FAL_KEY` is set.
+
 ### Keyless workflow (what Claude does through the connector)
 1. `research_brand` → crawl evidence → Claude writes the brand profile
 2. `creative_playbook(platform, format)` → the standards it will be measured on
 3. Posts: write 3 angles → `check_post` (measured checks + honest self-scores) → keep the best
 4. Graphics: `render_post_image(spec)` → PNGs + permanent links
-5. Video: `render_video(spec)` → MP4 + frames + measured failures → fix → re-render until 100/100 technical and ≥85 overall
+5. Video: `quick_video(...)` for a proven format in one call, or `render_video(spec)` for custom work → MP4 + frames + measured failures → fix → re-render until 100/100 technical and ≥85 overall
 
 See `examples/` for real specs (the Gutter Genie freeze-up reel with two coded animations and per-scene voiceover).
 
