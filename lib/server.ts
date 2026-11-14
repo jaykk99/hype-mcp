@@ -14,6 +14,37 @@ import { PLATFORMS, type Platform } from "./platforms";
 import { makeVideo } from "./video/director";
 import { SANDBOX_API_DOC } from "./video/sandbox";
 import { buildQuickSpec, QUICK_FORMATS } from "./video/quick";
+import { researchContent, type ContentResearch } from "./audience";
+
+/** Audience research for a brand: the topic (or main service) in the brand's market. Never fails the caller. */
+async function researchFor(brand: Partial<BrandProfile>, topic?: string): Promise<ContentResearch | null> {
+  const t = (topic && topic.split(/[,.;]| - /)[0].trim().split(/\s+/).slice(0, 5).join(" ")) || (brand.what_they_sell?.[0] || "").replace(/\(.*?\)/g, "").trim();
+  if (!t) return null;
+  try {
+    return await researchContent({ topic: t, location: brand.location_or_market });
+  } catch {
+    return null;
+  }
+}
+
+function researchSummary(r: ContentResearch) {
+  const q = r.audience_questions;
+  const lines = [
+    `## 🔎 Content research: "${r.topic}"${r.location ? ` in ${r.location}` : ""}`,
+    `**When:** ${r.season.month} (${r.season.season})${r.season.upcoming_events.length ? ` · coming up: ${r.season.upcoming_events.slice(0, 4).map((e) => `${e.name} (${e.in_days}d)`).join(", ")}` : ""}`,
+    `**What people search and ask** (${q.total} real autocomplete queries):\n${q.top_questions.slice(0, 12).map((x) => `- ${x}`).join("\n") || "- (none found)"}`,
+    `**By intent:** ${Object.entries(q.by_intent).map(([k, v]) => `${k} ${v.length}`).join(" · ")}`,
+    r.youtube.top_by_velocity.length
+      ? `**What already pulls views** (YouTube, by views/year):\n${r.youtube.top_by_velocity.slice(0, 6).map((v) => `- ${v.title} — ${v.views.toLocaleString()} views${v.age_years !== null ? `, ${v.age_years < 1 ? `${Math.round(v.age_years * 12)}mo` : `${Math.round(v.age_years)}y`} old` : ""} (${v.channel})`).join("\n")}`
+      : "**YouTube:** no results read.",
+    r.youtube.title_patterns.some((p) => (p.lift ?? 0) >= 1) ? `**Title patterns that win:** ${r.youtube.title_patterns.filter((p) => (p.lift ?? 0) >= 1).slice(0, 4).map((p) => `${p.pattern} (${p.share}% of results, ${p.lift}x median views/yr)`).join("; ")}` : "",
+    r.youtube.title_patterns.some((p) => p.lift !== null && p.lift < 0.7) ? `**Patterns that underperform here:** ${r.youtube.title_patterns.filter((p) => p.lift !== null && p.lift < 0.7).map((p) => `${p.pattern} (${p.lift}x)`).join("; ")}` : "",
+    r.reddit.length ? `**Community threads:**\n${r.reddit.slice(0, 5).map((x: any) => `- ${x.title}${x.subreddit ? ` (${x.subreddit})` : ""}`).join("\n")}` : "**Reddit:** not reachable from this server (use your own web search for community questions if you need them).",
+    `**Starter ideas** (rewrite each hook with the brand's real facts):\n${r.ideas.map((i) => `- [${i.quick_video_format} · ${i.angle}] "${i.starter_hook}" ← ${i.topic} (${i.why})`).join("\n")}`,
+    `_Next: pick one idea, read creative_playbook, and name the question/title it's built on in the post._`,
+  ];
+  return lines.filter(Boolean).join("\n\n");
+}
 
 const platformEnum = z.enum(["instagram", "tiktok", "facebook", "linkedin", "x", "youtube_shorts", "threads"]);
 const formatEnum = z.enum(["post", "photo", "carousel", "reel", "story"]);
@@ -40,7 +71,9 @@ function renderSummary(r: Awaited<ReturnType<typeof createPost>>, platform: Plat
   const c = r.best;
   const lines = [
     `## ${PLATFORMS[platform].label} ${c.format} — score ${r.scorecard.score}/100 (${r.scorecard.verdict})${r.passed_threshold ? " ✅ passed" : " ⚠️ below target"}`,
+    c.built_on ? `**Built on:** ${c.built_on}` : "",
     `**Hook:** ${c.hook}`,
+    c.hook_options?.length ? `**Other hooks it tried:** ${c.hook_options.filter((h) => h !== c.hook).slice(0, 4).map((h) => `"${h}"`).join(" · ")}` : "",
     `**Caption:**\n${c.caption}\n\n${(c.hashtags || []).join(" ")}`,
     `**CTA:** ${c.cta}`,
   ];
@@ -69,7 +102,7 @@ function renderSummary(r: Awaited<ReturnType<typeof createPost>>, platform: Plat
 }
 
 export function buildServer() {
-  const server = new McpServer({ name: "hype-mcp", version: "4.0.0" }, { instructions: SERVER_INSTRUCTIONS });
+  const server = new McpServer({ name: "hype-mcp", version: "4.1.0" }, { instructions: SERVER_INSTRUCTIONS });
   const serverLLM = !!process.env.LLM_API_KEY;
   // Tools that cannot run on this deployment are not listed at all. Before, a keyless server still
   // advertised create_post / make_video / benchmark_content / content_plan / render_video_spec (need a
@@ -109,15 +142,49 @@ export function buildServer() {
             );
           }
           return json(
-            { evidence, sources, profile_fields: ["name", "one_liner", "what_they_sell[]", "location_or_market", "target_audience[{segment,pains[],desires[]}]", "brand_voice{tone[],do[],dont[],sample_line}", "visual_identity{colors[],style,imagery_subjects[]}", "content_pillars[{name,why}]", "proof_points[]", "offers_and_ctas[]", "competitors_or_peers[]", "content_gaps_and_opportunities[]", "banned_claims[]", "real_photo_urls[]"] },
-            `Crawled ${sources.length} sources for "${input}". You are the strategist: write the brand profile from this evidence (only facts it supports; add your own web research or what the user told you). List real photo URLs found (og:image, site images) for use in graphics/videos. Pass the profile object as \`brand\` to check_post.`
+            { evidence, sources, profile_fields: ["name", "one_liner", "what_they_sell[]", "location_or_market", "target_audience[{segment,pains[],desires[]}]", "brand_voice{tone[],do[],dont[],sample_line}", "visual_identity{colors[],style,imagery_subjects[]}", "content_pillars[{name,why}]", "proof_points[]", "offers_and_ctas[]", "competitors_or_peers[]", "content_gaps_and_opportunities[]", "banned_claims[]", "real_photo_urls[]", "verified_prices[]", "customer_questions[]", "facts{area_served[],services[],rating,opening_hours[]}"] },
+            [
+              `Crawled ${sources.length} sources for "${input}".`,
+              (evidence as any).site_facts?.types?.length ? `Structured facts: ${JSON.stringify({ ...(evidence as any).site_facts, faqs: undefined }).slice(0, 400)}` : "",
+              (evidence as any).real_photo_urls?.length ? `Real photos found: ${(evidence as any).real_photo_urls.length}` : "No usable photos found on the site.",
+              (evidence as any).prices_on_site?.length ? `Prices on the site: ${(evidence as any).prices_on_site.slice(0, 4).join(" | ")}` : "No prices published on the site, so don't use any unless the user gives them.",
+              (evidence as any).questions_site_answers?.length ? `Questions the site answers: ${(evidence as any).questions_site_answers.length}` : "",
+              `You are the strategist: write the brand profile from this evidence (only facts it supports; add your own web research or what the user told you). Copy real_photo_urls and prices_on_site (as verified_prices) into the profile. Then call research_content with the main service + location for real customer questions. Pass the profile object as \`brand\` to check_post.`,
+            ].filter(Boolean).join("\n")
           );
         }
         const p = await researchBrand(input, { extra_context, refresh });
         return json(
           p,
-          `Researched **${p.name}** (confidence: ${p.confidence}) — ${p.one_liner}\nPillars: ${p.content_pillars?.map((x) => x.name).join(", ")}\nTop opportunity: ${p.content_gaps_and_opportunities?.[0] || "-"}`
+          `Researched **${p.name}** (confidence: ${p.confidence}) — ${p.one_liner}\nPillars: ${p.content_pillars?.map((x) => x.name).join(", ")}\nTop opportunity: ${p.content_gaps_and_opportunities?.[0] || "-"}${p.customer_questions?.length ? `\nWhat customers ask: ${p.customer_questions.slice(0, 5).join(" · ")}` : ""}${p.real_photo_urls?.length ? `\nReal photos found: ${p.real_photo_urls.length}` : ""}${p.verified_prices?.length ? `\nPrices on the site: ${p.verified_prices.slice(0, 3).join(" | ")}` : ""}`
         );
+      } catch (e) {
+        return fail(e);
+      }
+    }
+  );
+
+  server.registerTool(
+    "research_content",
+    {
+      title: "Research what to post about (real questions, proven titles, timing)",
+      description:
+        "Keyless audience research for a topic: mines Google + DuckDuckGo autocomplete for the real questions people search (grouped by intent: cost, problems/signs, how-to, timing, comparison, hiring, local), reads YouTube search results to find which titles pull the most views per year and the title patterns behind them, checks Reddit threads where reachable, adds the season and upcoming dates for the location, and returns starter ideas mapped to quick_video formats. Use before writing any post, plan or video. Read-only.",
+      inputSchema: {
+        topic: z.string().optional().describe("The service, product or niche, e.g. 'gutter cleaning', 'roof snow removal', 'wedding cakes'. Defaults to the brand's main service."),
+        location: z.string().optional().describe("City/region, e.g. 'Winnipeg, Manitoba'. Defaults to the brand's market."),
+        brand: z.record(z.any()).optional().describe("Brand profile (optional) — supplies topic/location defaults"),
+        depth: z.enum(["quick", "deep"]).optional().describe("deep also searches YouTube for mistakes/shorts variants (default quick)"),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    async ({ topic, location, brand, depth }) => {
+      try {
+        const b = (brand || {}) as Partial<BrandProfile>;
+        const t = topic || (b.what_they_sell?.[0] || "").replace(/\(.*?\)/g, "").trim();
+        if (!t) return { isError: true, content: [{ type: "text" as const, text: "research_content needs a topic (e.g. 'gutter cleaning') or a brand profile with what_they_sell." }] };
+        const r = await researchContent({ topic: t, location: location || b.location_or_market, depth });
+        return json(r, researchSummary(r));
       } catch (e) {
         return fail(e);
       }
@@ -141,6 +208,7 @@ export function buildServer() {
         judges: z.number().int().min(1).max(3).optional().describe("Independent judge personas (default 2)"),
         render: z.boolean().optional().describe("Render images/keyframes (default true)"),
         effort: z.enum(["fast", "standard", "max"]).optional().describe("max = 5 angles, 3 judges, 3 rewrite rounds, bar 88 (slower, best output)"),
+        research: z.boolean().optional().describe("Research real customer questions + proven titles first and build on them (default true)"),
         extra_context: z.string().optional(),
       },
     },
@@ -149,8 +217,10 @@ export function buildServer() {
       try {
         const brand = await resolveBrand(a.brand, a.extra_context);
         const preset = a.effort === "max" ? { variants: 5, judges: 3, max_rounds: 3, min_score: 88 } : a.effort === "fast" ? { variants: 2, judges: 1, max_rounds: 1, min_score: 75 } : {};
-        const r = await createPost({ ...preset, ...Object.fromEntries(Object.entries(a).filter(([, v]) => v !== undefined)), brand, platform: a.platform as Platform } as any);
-        return json({ brand_name: brand.name, ...r }, renderSummary(r, a.platform as Platform));
+        const research = a.research === false ? null : await researchFor(brand, a.topic);
+        const { research: _r, ...rest } = a;
+        const r = await createPost({ ...preset, ...Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined)), brand, platform: a.platform as Platform, research } as any);
+        return json({ brand_name: brand.name, ...r, research_used: research ? { topic: research.topic, questions: research.audience_questions.top_questions.slice(0, 8) } : null }, renderSummary(r, a.platform as Platform));
       } catch (e) {
         return fail(e);
       }
@@ -465,16 +535,18 @@ export function buildServer() {
         platform: platformEnum.default("instagram"),
         days: z.number().int().min(3).max(31).default(14),
         posts_per_week: z.number().int().min(1).max(14).default(4),
+        topic: z.string().optional().describe("Service/niche to research (defaults to the brand's main service)"),
       },
     },
     async (a) => {
       if (!serverLLM) return needBrain("content_plan");
       try {
         const brand = await resolveBrand(a.brand);
-        const plan = await contentPlan(brand, a.platform as Platform, a.days, a.posts_per_week);
+        const research = await researchFor(brand, a.topic);
+        const plan = await contentPlan(brand, a.platform as Platform, a.days, a.posts_per_week, research);
         return json(
-          plan,
-          plan.plan.map((p) => `Day ${p.day} · ${p.format} · ${p.pillar} — "${p.hook}"`).join("\n")
+          { ...plan, research_topic: research?.topic },
+          plan.plan.map((p) => `Day ${p.day} · ${p.format} · ${p.pillar} — "${p.hook}"${p.built_on ? `\n   ↳ built on: ${p.built_on}` : ""}`).join("\n")
         );
       } catch (e) {
         return fail(e);

@@ -1,13 +1,14 @@
 {
   "name": "hype-mcp",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "private": true,
   "description": "Marketing agent MCP server: researches a brand/channel, creates posts, photos, carousels and reels, then benchmarks and rewrites its own content until it passes.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "tsx scripts/test-checks.ts"
+    "test": "tsx scripts/test-checks.ts",
+    "test:live": "tsx scripts/test-research.ts && tsx scripts/test-mcp.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.2",
