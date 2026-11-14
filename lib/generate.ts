@@ -3,9 +3,13 @@ import { ANGLES, PLATFORMS, type Format, type Platform } from "./platforms";
 import { judgeContent, judgeImage, slimBrand, type Content, type Scorecard } from "./judge";
 import { renderImage, type RenderedImage } from "./media";
 import type { BrandProfile } from "./research";
+import { researchBrief, type ContentResearch } from "./audience";
+import { CRAFT } from "./playbook";
 
 function formatSchema(format: Format): string {
-  const common = `"hook": "the first line / first spoken words — max 12 words, specific",
+  const common = `"built_on": "the real customer question, proven title, brand proof or season this post is built on",
+"hook_options": ["5 different hooks using different formulas — all specific"],
+"hook": "the first line / first spoken words — max 12 words, specific",
 "caption": "full caption, line breaks with \\n, hook as first line",
 "hashtags": ["#..."],
 "cta": "...",
@@ -38,7 +42,8 @@ async function writeVariant(
   format: Format,
   angle: string,
   topic: string | undefined,
-  temperature: number
+  temperature: number,
+  research?: ContentResearch | null
 ): Promise<Content> {
   const spec = PLATFORMS[platform];
   const c = await chatJson<Content>(
@@ -54,12 +59,16 @@ Hard rules:
 - Caption ${spec.captionIdeal[0]}-${spec.captionIdeal[1]} chars, first line ≤${spec.hookVisibleChars} chars. ${spec.hashtags[0]}-${spec.hashtags[1]} specific hashtags (niche + local, no #fyp/#viral).
 - ${format === "reel" || format === "story" ? `Length ${spec.videoSeconds[0]}-${spec.videoSeconds[1]}s. First beat ≤2s. On-screen text on every beat (people watch muted). End with a loop or payoff.` : ""}
 - Platform notes: ${spec.notes}
+- Write 5 hook_options first (different formulas), then set "hook" to the most specific one. Every number/price/town must come from the brand profile or research.
+
+${CRAFT}
+
 Return ONLY JSON in this shape:
 ${formatSchema(format)}`,
       },
       {
         role: "user",
-        content: `BRAND PROFILE:\n${JSON.stringify(slimBrand(brand))}\n\n${topic ? `TOPIC / BRIEF FROM OWNER: ${topic}` : "Pick the strongest topic from the brand's pillars and content gaps."}`,
+        content: `BRAND PROFILE:\n${JSON.stringify(slimBrand(brand))}\n\n${research ? `AUDIENCE RESEARCH (real searches, questions and proven titles — build on these):\n${JSON.stringify(researchBrief(research))}\n\n` : ""}${topic ? `TOPIC / BRIEF FROM OWNER: ${topic}` : "Pick the strongest topic: a real customer question from the research that this brand can answer with its own proof, timed to the season."}`,
       },
     ],
     { model: models.writer(), temperature, maxTokens: 2500 }
@@ -68,6 +77,21 @@ ${formatSchema(format)}`,
   c.angle = angle;
   c.hashtags = (c.hashtags || []).map((h) => "#" + String(h).replace(/^#+/, "").replace(/\s+/g, ""));
   return c;
+}
+
+/** Angles matched to what the research says people want (cost questions → price transparency, problems → signs…), then varied. */
+export function pickAngles(n: number, research?: ContentResearch | null, topic?: string): string[] {
+  const want: string[] = [];
+  const by = research?.audience_questions.by_intent || {};
+  const t = (topic || "").toLowerCase();
+  const find = (k: string) => ANGLES.find((a) => a.startsWith(k));
+  if (/cost|price|\$|how much/.test(t) || (by.cost?.length || 0) >= 3) want.push(find("myth-bust")!, find("quick how-to")!);
+  if ((by.problem?.length || 0) >= 3) want.push(find("listicle")!, find("pain point")!);
+  if ((by.timing?.length || 0) >= 2 || research?.season.upcoming_events.length) want.push(find("urgency")!);
+  if ((by.how_to?.length || 0) >= 3) want.push(find("quick how-to")!);
+  if (research?.youtube.title_patterns.some((p) => /Before\/after/.test(p.pattern) && (p.lift ?? 0) >= 1)) want.push(find("before/after")!);
+  const rest = [...ANGLES].sort(() => Math.random() - 0.5);
+  return [...new Set([...want.filter(Boolean), ...rest])].slice(0, n);
 }
 
 async function revise(
@@ -120,6 +144,7 @@ export async function createPost(params: {
   max_rounds?: number;
   render?: boolean;
   judges?: number;
+  research?: ContentResearch | null;
 }): Promise<CreateResult> {
   const { brand, platform, format, topic } = params;
   const variants = Math.max(1, Math.min(5, params.variants ?? 3));
@@ -128,12 +153,12 @@ export async function createPost(params: {
   const judges = params.judges ?? 2;
 
   // 1) Write K variants with different angles in parallel.
-  const shuffled = [...ANGLES].sort(() => Math.random() - 0.5).slice(0, variants);
+  const shuffled = pickAngles(variants, params.research, topic);
   const errors: string[] = [];
   const drafts = (
     await Promise.all(
       shuffled.map((a, i) =>
-        writeVariant(brand, platform, format, a, topic, 0.85 + i * 0.05).catch((e) => {
+        writeVariant(brand, platform, format, a, topic, 0.85 + i * 0.05, params.research).catch((e) => {
           errors.push(String(e?.message || e).slice(0, 300));
           return null;
         })
@@ -220,16 +245,19 @@ export async function createPost(params: {
   };
 }
 
-export async function contentPlan(brand: Partial<BrandProfile>, platform: Platform, days: number, postsPerWeek: number) {
-  return chatJson<{ plan: { day: number; format: Format; pillar: string; angle: string; topic: string; hook: string; why_it_will_work: string }[]; strategy_notes: string[] }>(
+export async function contentPlan(brand: Partial<BrandProfile>, platform: Platform, days: number, postsPerWeek: number, research?: ContentResearch | null) {
+  return chatJson<{ plan: { day: number; format: Format; pillar: string; angle: string; topic: string; built_on: string; hook: string; why_it_will_work: string }[]; strategy_notes: string[] }>(
     [
       {
         role: "system",
         content: `You are a head of social planning a ${days}-day ${PLATFORMS[platform].label} calendar (${postsPerWeek} posts/week).
 Mix formats (reels should be ~50%+ on IG/TikTok/Shorts), rotate pillars, every idea must be SPECIFIC to this brand and market (real services, local towns, seasons — current month is ${new Date().toLocaleString("en", { month: "long" })}).
-Return JSON {"plan":[{"day":n,"format":"reel|photo|carousel|story|post","pillar":"","angle":"","topic":"","hook":"≤12 words","why_it_will_work":""}],"strategy_notes":[...]}`,
+Every idea is built on evidence: a real customer question or search from the research, a proven high-view title remade locally, a real brand proof/photo, or an upcoming date/season moment. Put that in "built_on". Schedule seasonal ideas 2-3 weeks before the moment.
+Spread across intents: cost, problems/signs, how-to, timing, comparison/myth, proof/behind-the-scenes.
+Hooks: specific (number, town, named thing), no weak openers ("Are you", "Did you know", "Looking for").
+Return JSON {"plan":[{"day":n,"format":"reel|photo|carousel|story|post","pillar":"","angle":"","topic":"","built_on":"","hook":"≤12 words","why_it_will_work":""}],"strategy_notes":[...]}`,
       },
-      { role: "user", content: JSON.stringify(slimBrand(brand)) },
+      { role: "user", content: `BRAND:\n${JSON.stringify(slimBrand(brand))}${research ? `\n\nAUDIENCE RESEARCH:\n${JSON.stringify({ ...researchBrief(research), more_questions: research.audience_questions.by_intent, upcoming: research.season.upcoming_events })}` : ""}` },
     ],
     { model: models.writer(), temperature: 0.8, maxTokens: 3500 }
   );

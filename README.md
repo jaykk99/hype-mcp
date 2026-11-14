@@ -18,6 +18,25 @@ Plug it into Claude. Give it a company name, website or channel, and it research
 
 The only download is Kokoro's open model weights (~90 MB) from the public model hub on first use. Keys in `.env.example` are optional upgrades that let the server run fully autonomously without Claude.
 
+### Research for content (new in 4.1)
+Content is now built on evidence, not guesses. `research_content(topic, location)` is keyless and takes about a second:
+
+| Source | What it gives the writer |
+|---|---|
+| Google + DuckDuckGo autocomplete (~30 question/buyer modifiers) | 200+ real searches, grouped by intent: cost, problems/signs, how-to, timing, comparison, hiring, local. Off-topic drift and trade-side queries ("how to start a … business") are filtered out |
+| YouTube search results | Which titles pull the most **views per year**, and which title patterns beat the median (e.g. "warning / mistake" 9.9x, "before/after" 13x) or underperform |
+| Reddit | Community threads where Reddit is reachable (often blocked from datacenters; a search key in `.env` covers it) |
+| Calendar | Season (hemisphere-aware) and the dates coming up in the next 60 days for the country |
+
+It returns starter ideas mapped to `quick_video` formats, with hooks taken from the real questions.
+
+`research_brand` also reads much more of a site: up to 6 inner pages (pricing, services, FAQ, reviews, areas, gallery) with a sitemap fallback, **schema.org facts** (phone, address, area served, hours, rating and review count, services, FAQ answers), **real photo URLs** (logos/icons filtered out), **prices published on the site**, the questions the site answers, and what people type after the brand name.
+
+`create_post` and `content_plan` research automatically and build on it. Each post says what it's `built_on`, and the writer drafts 5 hooks before choosing one.
+
+### Sharper measured checks
+On top of the existing ~25 checks: weak openers ("Are you…", "Did you know…", "We're excited…"), a hook with no concrete anchor (number, town, named thing, season), posts that use none of the brand's real services/towns/proof, "we"-heavy copy, long sentences, and wall-of-text captions. The playbook gained hook formulas, a caption structure, value types, retention rules and carousel rules, and the writer and the measurements use the same source.
+
 ### Finishing
 Film grain, vignette, handheld camera drift and a shake on hook hits. Captions come in 4 styles: `pop` (default, bold creator style), `box`, `karaoke` and `minimal`. The playbook has 7 proven formats (Problem→Agitate→Fix, 3 Signs, Myth vs Fact, POV, Before→After, Price transparency, Service area).
 
@@ -43,14 +62,15 @@ Pick a proven format, give the words, get a finished MP4 (voiceover, captions, m
 
 Every word on screen comes from the inputs, so nothing is invented. If a required field is missing the tool says which one.
 
-**Only tools that can run are listed.** A keyless server shows 9 tools. `create_post`, `make_video`, `benchmark_content`, `content_plan` and `render_video_spec` appear when `LLM_API_KEY` is set; `render_reel` / `check_render` appear when `FAL_KEY` is set.
+**Only tools that can run are listed.** A keyless server shows 10 tools. `create_post`, `make_video`, `benchmark_content`, `content_plan` and `render_video_spec` appear when `LLM_API_KEY` is set; `render_reel` / `check_render` appear when `FAL_KEY` is set.
 
 ### Keyless workflow (what Claude does through the connector)
 1. `research_brand` → crawl evidence → Claude writes the brand profile
-2. `creative_playbook(platform, format)` → the standards it will be measured on
-3. Posts: write 3 angles → `check_post` (measured checks + honest self-scores) → keep the best
-4. Graphics: `render_post_image(spec)` → PNGs + permanent links
-5. Video: `quick_video(...)` for a proven format in one call, or `render_video(spec)` for custom work → MP4 + frames + measured failures → fix → re-render until 100/100 technical and ≥85 overall
+2. `research_content(main service, town)` → real questions, proven titles, timing → pick a topic
+3. `creative_playbook(platform, format)` → the standards it will be measured on
+4. Posts: write 3 angles → `check_post` (measured checks + honest self-scores) → keep the best
+5. Graphics: `render_post_image(spec)` → PNGs + permanent links
+6. Video: `quick_video(...)` for a proven format in one call, or `render_video(spec)` for custom work → MP4 + frames + measured failures → fix → re-render until 100/100 technical and ≥85 overall
 
 See `examples/` for real specs (the Gutter Genie freeze-up reel with two coded animations and per-scene voiceover).
 
@@ -58,6 +78,7 @@ See `examples/` for real specs (the Gutter Genie freeze-up reel with two coded a
 
 | Tool | What it does |
 |---|---|
+| `research_content` | Real customer questions by intent, YouTube titles ranked by views/year + winning patterns, Reddit threads, season and upcoming dates, starter ideas (keyless) |
 | `research_brand` | Website + inner pages, social profiles, YouTube uploads with view counts, web search → brand profile (offer, audience pains, voice, colours, pillars, gaps, **banned claims**) |
 | `create_post` | 3–5 variants from different angles → multi-judge rubric + ~25 automatic checks → rewrites the winner until it passes → renders and visually checks images |
 | `make_video` | **Writes, codes, renders and QA's a real vertical MP4** (see below) |
